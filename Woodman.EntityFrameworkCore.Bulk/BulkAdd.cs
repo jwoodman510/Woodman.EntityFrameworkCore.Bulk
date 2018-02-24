@@ -91,35 +91,7 @@ namespace Microsoft.EntityFrameworkCore
                 FROM {tableVar}
                 RETURNING {entityInfo.TableName}.id";
 
-            var dt = new DataTable();
-
-            var conn = dbContext.Database.GetDbConnection();
-
-            if (conn.State != ConnectionState.Open)
-            {
-                await conn.OpenAsync();
-            }
-
-            using (var cmd = conn.CreateCommand())
-            {
-                cmd.CommandText = sqlCmd;
-                cmd.CommandType = CommandType.Text;
-
-                using (var reader = await cmd.ExecuteReaderAsync())
-                {
-                    dt.Load(reader);
-                }
-            }
-
-            var index = 0;
-            foreach (DataRow row in dt.Rows)
-            {
-                ids[index] = row[0];
-
-                index++;
-            }
-
-            return ids;
+            return await ExecuteDbCommandAsync(ids, dbContext, sqlCmd);
         }
 
         private static async Task<object[]> BulkAddAsync<TEntity>(List<TEntity> toAdd, object[] ids, DbContext dbContext, SqlEntityInfo entityInfo)
@@ -157,6 +129,11 @@ namespace Microsoft.EntityFrameworkCore
                 {columnsSql}
                 FROM {tableVar}";
 
+            return await ExecuteDbCommandAsync(ids, dbContext, sqlCmd);
+        }
+
+        private static async Task<object[]> ExecuteDbCommandAsync(object[] ids, DbContext dbContext, string sqlCmd)
+        {
             var dt = new DataTable();
 
             var conn = dbContext.Database.GetDbConnection();
