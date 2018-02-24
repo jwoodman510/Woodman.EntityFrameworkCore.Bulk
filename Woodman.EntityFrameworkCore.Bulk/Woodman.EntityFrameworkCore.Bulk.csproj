@@ -2,6 +2,15 @@
 
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    <PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>
+    <Authors>Jordan Woodman</Authors>
+    <Company />
+    <PackageLicenseUrl>https://github.com/jwoodman510/Woodman.EntityFrameworkCore.Bulk/blob/master/LICENSE</PackageLicenseUrl>
+    <PackageProjectUrl>https://github.com/jwoodman510/Woodman.EntityFrameworkCore.Bulk</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/jwoodman510/Woodman.EntityFrameworkCore.Bulk</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <Description>Woodman.EntityFrameworkCore.Bulk provides bulk operations for SQLServer, Npgsql, and In Memory Entity Framework providers.</Description>
   </PropertyGroup>
 
   <ItemGroup>
