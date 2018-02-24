@@ -2,6 +2,10 @@
 
 ## Bulk Operations ##
 
+````
+   Install-Package Woodman.EntityFrameworkCore.Bulk
+````
+
 ### The following bulk operations are supported for SqlServer, NgpSql, and InMemory Providers: ###
 
 #### Bulk Join ####
