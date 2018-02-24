@@ -1,0 +1,1 @@
+dotnet ef dbcontext scaffold "Host=localhost;Database=postgres;Username=test;Password=Tatert0t" Npgsql.EntityFrameworkCore.PostgreSQL -t EfCoreTest -o Generated\\NpgSql

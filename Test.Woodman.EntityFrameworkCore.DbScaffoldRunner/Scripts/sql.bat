@@ -1,0 +1,1 @@
+dotnet ef dbcontext scaffold "Server=localhost\SQLEXPRESS;User Id=test; Password=Tatert0t;Database=woodman;" Microsoft.EntityFrameworkCore.SqlServer -t EfCoreTest -o Generated\\Sql
