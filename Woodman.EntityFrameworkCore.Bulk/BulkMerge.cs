@@ -1,8 +1,8 @@
-﻿using Microsoft.EntityFrameworkCore;
-using Npgsql;
+﻿using Npgsql;
 using System;
 using System.Collections.Generic;
 using System.Data;
+using System.Data.Common;
 using System.Data.SqlClient;
 using System.Linq;
 using System.Threading.Tasks;
@@ -12,24 +12,15 @@ using Woodman.EntityFrameworkCore.Bulk.Extensions;
 
 namespace Microsoft.EntityFrameworkCore
 {
-    public class BulkMergeResult
-    {
-        public int NumRowsAffected { get; set; }
-
-        public object[] InsertedIds { get; set; } = new object[0];
-    }
-
     public static class BulkMerge
     {
-        public static async Task<BulkMergeResult> BulkMergeAsync<TEntity>(this IQueryable<TEntity> queryable, IEnumerable<TEntity> entities) where TEntity : class
+        public static async Task<int> BulkMergeAsync<TEntity>(this IQueryable<TEntity> queryable, IEnumerable<TEntity> entities) where TEntity : class
         {
-            var result = new BulkMergeResult();
-
             var current = entities?.ToList() ?? new List<TEntity>();
 
             if (current.Count == 0)
             {
-                return result;
+                return 0;
             }
 
             var dbContext = queryable.GetDbContext();
@@ -37,15 +28,15 @@ namespace Microsoft.EntityFrameworkCore
 
             if (entityInfo is InMemEntityInfo inMemEntityInfo)
             {
-                return await queryable.BulkMergeAsync(result, current, dbContext, inMemEntityInfo);
+                return await queryable.BulkMergeAsync(current, dbContext, inMemEntityInfo);
             }
             else if (entityInfo is NpgSqlEntityInfo npgSqlEntityInfo)
             {
-                return await queryable.BulkMergeAsync(result, current, dbContext, npgSqlEntityInfo);
+                return await queryable.BulkMergeAsync(current, dbContext, npgSqlEntityInfo);
             }
             else if (entityInfo is SqlEntityInfo sqlEntityInfo)
             {
-                return await queryable.BulkMergeAsync(result, current, dbContext, sqlEntityInfo);
+                return await queryable.BulkMergeAsync(current, dbContext, sqlEntityInfo);
             }
             else
             {
@@ -53,7 +44,7 @@ namespace Microsoft.EntityFrameworkCore
             }
         }
 
-        private static async Task<BulkMergeResult> BulkMergeAsync<TEntity>(this IQueryable<TEntity> queryable, BulkMergeResult result, List<TEntity> current, DbContext dbContext, InMemEntityInfo entityInfo)
+        private static async Task<int> BulkMergeAsync<TEntity>(this IQueryable<TEntity> queryable, List<TEntity> current, DbContext dbContext, InMemEntityInfo entityInfo)
             where TEntity : class
         {
             var previous = await queryable.ToListAsync();
@@ -72,17 +63,7 @@ namespace Microsoft.EntityFrameworkCore
 
             dbContext.RemoveRange(toDelete);
 
-            result.InsertedIds = new object[toAdd.Count];
-
-            var i = 0;
-            foreach (var entity in toAdd)
-            {
-                var added = await dbContext.AddAsync(entity);
-
-                result.InsertedIds[i] = entityInfo.GetPrimaryKey(entity);
-
-                i++;
-            }
+            await dbContext.AddRangeAsync(toAdd);
 
             foreach (var entity in toUpdate)
             {
@@ -94,12 +75,10 @@ namespace Microsoft.EntityFrameworkCore
                 }
             }
 
-            result.NumRowsAffected = await dbContext.SaveChangesAsync();
-
-            return result;
+            return await dbContext.SaveChangesAsync();
         }
 
-        private static async Task<BulkMergeResult> BulkMergeAsync<TEntity>(this IQueryable<TEntity> queryable, BulkMergeResult result, List<TEntity> current, DbContext dbContext, SqlEntityInfo entityInfo)
+        private static async Task<int> BulkMergeAsync<TEntity>(this IQueryable<TEntity> queryable, List<TEntity> current, DbContext dbContext, SqlEntityInfo entityInfo)
             where TEntity : class
         {
             var deltaSql = string.Join(",", current.Select(entity =>
@@ -142,53 +121,12 @@ namespace Microsoft.EntityFrameworkCore
                 VALUES ({insertSourceColumnSql})
                 WHEN NOT MATCHED BY SOURCE THEN
                 DELETE
-                OUTPUT $action, inserted.{entityInfo.PrimaryKeyColumnName};";
+                OUTPUT inserted.{entityInfo.PrimaryKeyColumnName}, $action;";
 
-            var dt = new DataTable();
-
-            var conn = dbContext.Database.GetDbConnection();
-
-            if (conn.State != ConnectionState.Open)
-            {
-                await conn.OpenAsync();
-            }
-
-            using (var cmd = conn.CreateCommand())
-            {
-                cmd.CommandText = sqlCmd;
-                cmd.CommandType = CommandType.Text;
-
-                foreach (var p in parameters)
-                {
-                    cmd.Parameters.Add(new SqlParameter(p.ParameterName, p.Value));
-                }
-
-                using (var reader = await cmd.ExecuteReaderAsync())
-                {
-                    var count = 0;
-                    var ids = new List<object>();
-
-                    while (await reader.ReadAsync())
-                    {
-                        var action = reader.GetValue(0).ToString();
-
-                        if (action == MergeActions.Insert)
-                        {
-                            ids.Add(reader.GetValue(1));
-                        }
-
-                        count++;
-                    }
-
-                    result.NumRowsAffected = count;
-                    result.InsertedIds = ids.ToArray();
-                }
-            }
-
-            return result;
+            return await ExecuteSqlCmdAsync(current, dbContext, entityInfo, sqlCmd, parameters.Select(p => new SqlParameter(p.ParameterName, p.Value)));
         }
 
-        private static async Task<BulkMergeResult> BulkMergeAsync<TEntity>(this IQueryable<TEntity> queryable, BulkMergeResult result, List<TEntity> current, DbContext dbContext, NpgSqlEntityInfo entityInfo)
+        private static async Task<int> BulkMergeAsync<TEntity>(this IQueryable<TEntity> queryable, List<TEntity> current, DbContext dbContext, NpgSqlEntityInfo entityInfo)
             where TEntity : class
         {
             var tableVar = $"_m_{typeof(TEntity).Name}";
@@ -215,39 +153,60 @@ namespace Microsoft.EntityFrameworkCore
 
             var sqlCmd = $@"
                 CREATE TEMP TABLE {tableVar} ({string.Join(", ", entityInfo.PropertyMappings.Select(m => $"{m.ColumnName} {m.ColumnType}"))});
+                CREATE TEMP TABLE _m_results ({entityInfo.PrimaryKeyColumnName} {entityInfo.PrimaryKeyColumnType}, action varchar(10)) ;
 
                 INSERT INTO {tableVar} VALUES
                     {deltaSql};
 
-                DELETE FROM {entityInfo.TableName} d
-                USING (
-                    {qrySql}
-                ) AS d_q
-                LEFT JOIN {tableVar} AS d_m ON d_q.{entityInfo.PrimaryKeyColumnName} = d_m.{entityInfo.PrimaryKeyColumnName}
-                WHERE d_q.{entityInfo.PrimaryKeyColumnName} = d.{entityInfo.PrimaryKeyColumnName}
-                AND d_m.{entityInfo.PrimaryKeyColumnName} IS NULL;
+                WITH _out AS
+                (
+                    DELETE FROM {entityInfo.TableName} d
+                    USING (
+                        {qrySql}
+                    ) AS d_q
+                    LEFT JOIN {tableVar} AS d_m ON d_q.{entityInfo.PrimaryKeyColumnName} = d_m.{entityInfo.PrimaryKeyColumnName}
+                    WHERE d_q.{entityInfo.PrimaryKeyColumnName} = d.{entityInfo.PrimaryKeyColumnName}
+                    AND d_m.{entityInfo.PrimaryKeyColumnName} IS NULL
+                    RETURNING 0 AS id, '{MergeActions.Delete}' AS action
+                )
+                INSERT INTO _m_results SELECT id, action FROM _out;
                 
-                UPDATE {entityInfo.TableName} AS u
-                SET
-                    {string.Join(",", updateProperties.Select(prop => $@"
-                    {prop.ColumnName} = u_m.{prop.ColumnName}"))}
-                FROM (
-                    {qrySql}
-                ) as u_q
-                JOIN {tableVar} u_m ON u_m.{entityInfo.PrimaryKeyColumnName} = u_q.{entityInfo.PrimaryKeyColumnName}
-                WHERE u_q.{entityInfo.PrimaryKeyColumnName} = u.{entityInfo.PrimaryKeyColumnName};
+                WITH _out AS
+                (
+                    UPDATE {entityInfo.TableName} AS u
+                    SET
+                        {string.Join(",", updateProperties.Select(prop => $@"
+                        {prop.ColumnName} = u_m.{prop.ColumnName}"))}
+                    FROM (
+                        {qrySql}
+                    ) as u_q
+                    JOIN {tableVar} u_m ON u_m.{entityInfo.PrimaryKeyColumnName} = u_q.{entityInfo.PrimaryKeyColumnName}
+                    WHERE u_q.{entityInfo.PrimaryKeyColumnName} = u.{entityInfo.PrimaryKeyColumnName}
+                    RETURNING 0 as id, '{MergeActions.Update}' as action
+                )
+                INSERT INTO _m_results SELECT id, action FROM _out;
 
-                INSERT INTO {entityInfo.TableName}
-                ({insertColumnSql})
-                SELECT
-                {insertSelectColumnSql}
-                FROM {tableVar} i_m
-                LEFT JOIN {entityInfo.TableName} q_m ON q_m.{entityInfo.PrimaryKeyColumnName} = i_m.{entityInfo.PrimaryKeyColumnName}
-                WHERE q_m.{entityInfo.PrimaryKeyColumnName} IS NULL
-                RETURNING {entityInfo.TableName}.id;";
+                WITH _out AS
+                (
+                    INSERT INTO {entityInfo.TableName}
+                    ({insertColumnSql})
+                    SELECT
+                    {insertSelectColumnSql}
+                    FROM {tableVar} i_m
+                    LEFT JOIN {entityInfo.TableName} q_m ON q_m.{entityInfo.PrimaryKeyColumnName} = i_m.{entityInfo.PrimaryKeyColumnName}
+                    WHERE q_m.{entityInfo.PrimaryKeyColumnName} IS NULL
+                    RETURNING {entityInfo.TableName}.id as id, '{MergeActions.Insert}' as action
+                )
+                INSERT INTO _m_results SELECT id, action FROM _out;
 
-            var dt = new DataTable();
+                SELECT id, action FROM _m_results;";
 
+            return await ExecuteSqlCmdAsync(current, dbContext, entityInfo, sqlCmd, parameters.Select(p => new NpgsqlParameter(p.ParameterName, p.Value)));
+        }
+
+        private static async Task<int> ExecuteSqlCmdAsync<TEntity>(List<TEntity> current, DbContext dbContext, EntityInfoBase entityInfo, string sqlCmd, IEnumerable<DbParameter> cmdParams)
+            where TEntity : class
+        {
             var conn = dbContext.Database.GetDbConnection();
 
             if (conn.State != ConnectionState.Open)
@@ -255,31 +214,32 @@ namespace Microsoft.EntityFrameworkCore
                 await conn.OpenAsync();
             }
 
+            var numRecordsAffected = 0;
+
             using (var cmd = conn.CreateCommand())
             {
                 cmd.CommandText = sqlCmd;
                 cmd.CommandType = CommandType.Text;
 
-                foreach (var p in parameters)
-                {
-                    cmd.Parameters.Add(new NpgsqlParameter(p.ParameterName, p.Value));
-                }
+                cmd.Parameters.AddRange(cmdParams.ToArray());
 
                 using (var reader = await cmd.ExecuteReaderAsync())
                 {
-                    var ids = new List<object>();
-
                     while (await reader.ReadAsync())
                     {
-                        ids.Add(reader.GetValue(0));
-                    }
+                        var action = reader.GetValue(1).ToString();
 
-                    result.NumRowsAffected = reader.RecordsAffected - current.Count;
-                    result.InsertedIds = ids.ToArray();
+                        if (entityInfo.IsPrimaryKeyGenerated && action == MergeActions.Insert)
+                        {
+                            entityInfo.SetPrimaryKey(current.First(c => entityInfo.IsPrimaryKeyUnset(c)), reader.GetValue(0));
+                        }
+
+                        numRecordsAffected++;
+                    }
                 }
             }
 
-            return result;
+            return numRecordsAffected;
         }
     }
 }

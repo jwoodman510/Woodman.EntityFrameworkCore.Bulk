@@ -67,42 +67,28 @@ namespace Test.Woodman.EntityFrameworkCore.Bulk
 
             var expectedRecordsAffected = numUpdate + numDelete + numAdd;
 
-            BulkMergeResult result;
-
             using (var db = new woodmanContext())
             {
-                var minDate = DateTime.UtcNow.AddYears(-10);
-
-                result = await db.EfCoreTest
-                    .Where(e => e.Name.Contains(nameof(BulkMergeTests)) && e.CreatedDate > minDate)
+                var numRowsAffected = await db.EfCoreTest
+                    .Where(e => e.Name.Contains(nameof(BulkMergeTests)))
                     .BulkMergeAsync(toMerge);
 
-                Assert.Equal(numAdd, result.InsertedIds.Length);
-                Assert.Equal(expectedRecordsAffected, result.NumRowsAffected);
+                Assert.Equal(expectedRecordsAffected, numRowsAffected);
 
-                var mergedEntities = await db.EfCoreTest
+                var dbCount = await db.EfCoreTest
                     .Where(e => e.Name.Contains(nameof(BulkMergeTests)))
-                    .ToListAsync();
+                    .CountAsync();
 
-                Assert.Equal(toMerge.Count, mergedEntities.Count);
+                Assert.Equal(toMerge.Count, dbCount);
 
-                foreach (var m in mergedEntities)
+                foreach (var m in toMerge)
                 {
-                    if (result.InsertedIds.Contains(m.Id))
-                    {
-                        var index = result.InsertedIds.ToList().IndexOf(m.Id);
+                    var dbEntity = await db.EfCoreTest.FindAsync(m.Id);
 
-                        var expected = $"{nameof(BulkMergeTests)}_insert_{index}";
-
-                        Assert.Equal(expected, m.Name);
-                    }
-                    else
-                    {
-                        var updated = toMerge.FirstOrDefault(x => x.Id == m.Id);
-
-                        Assert.NotNull(updated);
-                        Assert.Equal(updated.ModifiedDate.ToString("G"), m.ModifiedDate.ToString("G"));
-                    }
+                    Assert.NotNull(dbEntity);
+                    Assert.Equal(m.Name, dbEntity.Name);
+                    Assert.Equal(m.ModifiedDate.ToString("G"), dbEntity.ModifiedDate.ToString("G"));
+                    Assert.Equal(m.CreatedDate.ToString("G"), dbEntity.CreatedDate.ToString("G"));
                 }
 
                 var dontDeleteEntity = await db.EfCoreTest.FindAsync(dontDelete.Id);
@@ -162,42 +148,28 @@ namespace Test.Woodman.EntityFrameworkCore.Bulk
 
             var expectedRecordsAffected = numUpdate + numDelete + numAdd;
 
-            BulkMergeResult result;
-
             using (var db = new postgresContext())
             {
-                var minDate = DateTime.UtcNow.AddYears(-10);
-
-                result = await db.Efcoretest
-                    .Where(e => e.Name.Contains(nameof(BulkMergeTests)) && e.Createddate > minDate)
+                var numRowsAffected = await db.Efcoretest
+                    .Where(e => e.Name.Contains(nameof(BulkMergeTests)))
                     .BulkMergeAsync(toMerge);
 
-                Assert.Equal(numAdd, result.InsertedIds.Length);
-                Assert.Equal(expectedRecordsAffected, result.NumRowsAffected);
+                Assert.Equal(expectedRecordsAffected, numRowsAffected);
 
-                var mergedEntities = await db.Efcoretest
+                var dbCount = await db.Efcoretest
                     .Where(e => e.Name.Contains(nameof(BulkMergeTests)))
-                    .ToListAsync();
+                    .CountAsync();
 
-                Assert.Equal(toMerge.Count, mergedEntities.Count);
+                Assert.Equal(toMerge.Count, dbCount);
 
-                foreach (var m in mergedEntities)
+                foreach (var m in toMerge)
                 {
-                    if (result.InsertedIds.Contains(m.Id))
-                    {
-                        var index = result.InsertedIds.ToList().IndexOf(m.Id);
+                    var dbEntity = await db.Efcoretest.FindAsync(m.Id);
 
-                        var expected = $"{nameof(BulkMergeTests)}_insert_{index}";
-
-                        Assert.Equal(expected, m.Name);
-                    }
-                    else
-                    {
-                        var updated = toMerge.FirstOrDefault(x => x.Id == m.Id);
-
-                        Assert.NotNull(updated);
-                        Assert.Equal(updated.Modifieddate.ToString("d"), m.Modifieddate.ToString("d"));
-                    }
+                    Assert.NotNull(dbEntity);
+                    Assert.Equal(m.Name, dbEntity.Name);
+                    Assert.Equal(m.Modifieddate.ToString("d"), dbEntity.Modifieddate.ToString("d"));
+                    Assert.Equal(m.Createddate.ToString("d"), dbEntity.Createddate.ToString("d"));
                 }
 
                 var dontDeleteEntity = await db.Efcoretest.FindAsync(dontDelete.Id);
@@ -245,40 +217,28 @@ namespace Test.Woodman.EntityFrameworkCore.Bulk
 
             var expectedRecordsAffected = numUpdate + numDelete + numAdd;
 
-            BulkMergeResult result;
-
             using (var db = new woodmanContext(InMemDbOpts))
             {
-                result = await db.EfCoreTest
+                var numRowsAffected = await db.EfCoreTest
                     .Where(e => e.Name.Contains(nameof(BulkMergeTests)))
                     .BulkMergeAsync(toMerge);
 
-                Assert.Equal(numAdd, result.InsertedIds.Length);
-                Assert.Equal(expectedRecordsAffected, result.NumRowsAffected);
+                Assert.Equal(expectedRecordsAffected, numRowsAffected);
 
-                var mergedEntities = await db.EfCoreTest
+                var dbCount = await db.EfCoreTest
                     .Where(e => e.Name.Contains(nameof(BulkMergeTests)))
-                    .ToListAsync();
+                    .CountAsync();
 
-                Assert.Equal(toMerge.Count, mergedEntities.Count);
+                Assert.Equal(toMerge.Count, dbCount);
 
-                foreach (var m in mergedEntities)
+                foreach (var m in toMerge)
                 {
-                    if (result.InsertedIds.Contains(m.Id))
-                    {
-                        var index = result.InsertedIds.ToList().IndexOf(m.Id);
+                    var dbEntity = await db.EfCoreTest.FindAsync(m.Id);
 
-                        var expected = $"{nameof(BulkMergeTests)}_insert_{index}";
-
-                        Assert.Equal(expected, m.Name);
-                    }
-                    else
-                    {
-                        var updated = toMerge.FirstOrDefault(x => x.Id == m.Id);
-
-                        Assert.NotNull(updated);
-                        Assert.Equal(updated.ModifiedDate.ToString("G"), m.ModifiedDate.ToString("G"));
-                    }
+                    Assert.NotNull(dbEntity);
+                    Assert.Equal(m.Name, dbEntity.Name);
+                    Assert.Equal(m.ModifiedDate.ToString("G"), dbEntity.ModifiedDate.ToString("G"));
+                    Assert.Equal(m.CreatedDate.ToString("G"), dbEntity.CreatedDate.ToString("G"));
                 }
             }
         }

@@ -10,15 +10,14 @@ namespace Microsoft.EntityFrameworkCore
 {
     public static class BulkAdd
     {
-        public static async Task<object[]> BulkAddAsync<TEntity>(this DbSet<TEntity> queryable, IEnumerable<TEntity> entities)
+        public static async Task BulkAddAsync<TEntity>(this DbSet<TEntity> queryable, IEnumerable<TEntity> entities)
             where TEntity : class, new()
         {
             var toAdd = entities?.ToList() ?? new List<TEntity>();
-            var ids = new object[toAdd.Count];
 
             if (toAdd.Count == 0)
             {
-                return ids;
+                return;
             }
 
             var dbContext = queryable.GetDbContext();
@@ -26,15 +25,15 @@ namespace Microsoft.EntityFrameworkCore
 
             if (entityInfo is InMemEntityInfo inMemEntityInfo)
             {
-                return await BulkAddAsync(entities, ids, dbContext, inMemEntityInfo);
+                await BulkAddAsync(entities, dbContext);
             }
             else if (entityInfo is NpgSqlEntityInfo npgSqlEntityInfo)
             {
-                return await BulkAddAsync(toAdd, ids, dbContext, npgSqlEntityInfo);
+                await BulkAddAsync(toAdd, dbContext, npgSqlEntityInfo);
             }
             else if (entityInfo is SqlEntityInfo sqlEntityInfo)
             {
-                return await BulkAddAsync(toAdd, ids, dbContext, sqlEntityInfo);
+                await BulkAddAsync(toAdd, dbContext, sqlEntityInfo);
             }
             else
             {
@@ -42,25 +41,15 @@ namespace Microsoft.EntityFrameworkCore
             }
         }
 
-        private static async Task<object[]> BulkAddAsync<TEntity>(IEnumerable<TEntity> entities, object[] ids, DbContext dbContext, InMemEntityInfo entityInfo)
+        private static async Task BulkAddAsync<TEntity>(IEnumerable<TEntity> entities, DbContext dbContext)
             where TEntity : class, new()
         {
-            var i = 0;
-            foreach (var entity in entities)
-            {
-                var added = await dbContext.AddAsync(entity);
-
-                ids[i] = entityInfo.GetPrimaryKey(entity);
-
-                i++;
-            }
+            await dbContext.AddRangeAsync(entities);
 
             await dbContext.SaveChangesAsync();
-
-            return ids;
         }
 
-        private static async Task<object[]> BulkAddAsync<TEntity>(List<TEntity> toAdd, object[] ids, DbContext dbContext, NpgSqlEntityInfo entityInfo)
+        private static async Task BulkAddAsync<TEntity>(List<TEntity> toAdd, DbContext dbContext, NpgSqlEntityInfo entityInfo)
             where TEntity : class, new()
         {
             var tableVar = $"_ToAdd_{typeof(TEntity).Name}";
@@ -91,10 +80,10 @@ namespace Microsoft.EntityFrameworkCore
                 FROM {tableVar}
                 RETURNING {entityInfo.TableName}.id";
 
-            return await ExecuteDbCommandAsync(ids, dbContext, sqlCmd);
+            await ExecuteDbCommandAsync(dbContext, sqlCmd, toAdd, entityInfo);
         }
 
-        private static async Task<object[]> BulkAddAsync<TEntity>(List<TEntity> toAdd, object[] ids, DbContext dbContext, SqlEntityInfo entityInfo)
+        private static async Task BulkAddAsync<TEntity>(List<TEntity> toAdd, DbContext dbContext, SqlEntityInfo entityInfo)
             where TEntity : class, new()
         {
             var tableVar = "@ToAdd";
@@ -129,13 +118,11 @@ namespace Microsoft.EntityFrameworkCore
                 {columnsSql}
                 FROM {tableVar}";
 
-            return await ExecuteDbCommandAsync(ids, dbContext, sqlCmd);
+            await ExecuteDbCommandAsync(dbContext, sqlCmd, toAdd, entityInfo);
         }
 
-        private static async Task<object[]> ExecuteDbCommandAsync(object[] ids, DbContext dbContext, string sqlCmd)
+        private static async Task ExecuteDbCommandAsync<TEntity>(DbContext dbContext, string sqlCmd, List<TEntity> entities, EntityInfoBase entityInfo)
         {
-            var dt = new DataTable();
-
             var conn = dbContext.Database.GetDbConnection();
 
             if (conn.State != ConnectionState.Open)
@@ -150,19 +137,16 @@ namespace Microsoft.EntityFrameworkCore
 
                 using (var reader = await cmd.ExecuteReaderAsync())
                 {
-                    dt.Load(reader);
+                    var index = 0;
+
+                    while(await reader.ReadAsync())
+                    {
+                        entityInfo.SetPrimaryKey(entities[index], reader[0]);
+
+                        index++;
+                    }
                 }
             }
-
-            var index = 0;
-            foreach (DataRow row in dt.Rows)
-            {
-                ids[index] = row[0];
-
-                index++;
-            }
-
-            return ids;
         }
     }
 }

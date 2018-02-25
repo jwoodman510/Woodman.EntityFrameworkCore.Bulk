@@ -59,18 +59,13 @@ namespace Test.Woodman.EntityFrameworkCore.Bulk
 
             using (var db = new woodmanContext())
             {
-                var ids = await db.EfCoreTest.BulkAddAsync(toCreate);
-
-                Assert.Equal(toCreate.Count, ids.Length);
-
-                var index = 0;
-                foreach (var id in ids)
+                await db.EfCoreTest.BulkAddAsync(toCreate);
+                
+                foreach (var e in toCreate)
                 {
-                    var added = await db.EfCoreTest.FindAsync((int)id);
+                    var added = await db.EfCoreTest.FindAsync(e.Id);
 
-                    Assert.Equal(toCreate[index].Name, added.Name);
-
-                    index++;
+                    Assert.Equal(e.Name, added.Name);
                 }
             }
         }
@@ -92,18 +87,13 @@ namespace Test.Woodman.EntityFrameworkCore.Bulk
 
             using (var db = new postgresContext())
             {
-                var ids = await db.Efcoretest.BulkAddAsync(toCreate);
-
-                Assert.Equal(toCreate.Count, ids.Length);
-
-                var index = 0;
-                foreach (var id in ids)
+                await db.Efcoretest.BulkAddAsync(toCreate);
+                
+                foreach (var e in toCreate)
                 {
-                    var added = await db.Efcoretest.FindAsync((int)id);
+                    var added = await db.Efcoretest.FindAsync(e.Id);
 
-                    Assert.Equal(toCreate[index].Name, added.Name);
-
-                    index++;
+                    Assert.Equal(e.Name, added.Name);
                 }
             }
         }
@@ -126,18 +116,13 @@ namespace Test.Woodman.EntityFrameworkCore.Bulk
 
             using (var db = new woodmanContext(InMemDbOpts))
             {
-                var ids = await db.EfCoreTest.BulkAddAsync(toCreate);
-
-                Assert.Equal(toCreate.Count, ids.Length);
-
-                var index = 0;
-                foreach (var id in ids)
+                await db.EfCoreTest.BulkAddAsync(toCreate);
+                
+                foreach (var e in toCreate)
                 {
-                    var added = await db.EfCoreTest.FindAsync((int)id);
+                    var added = await db.EfCoreTest.FindAsync(e.Id);
 
-                    Assert.Equal(toCreate[index].Name, added.Name);
-
-                    index++;
+                    Assert.Equal(e.Name, added.Name);
                 }
             }
         }

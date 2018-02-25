@@ -14,8 +14,6 @@ namespace Woodman.EntityFrameworkCore.Bulk.EntityInfo
 
         public string PrimaryKeyColumnType { get; }
 
-        public bool IsPrimaryKeyGenerated { get; }
-
         public List<NpgSqlPropertyMapping> PropertyMappings { get; }
 
         public NpgSqlEntityInfo(IEntityType entityType)
@@ -28,7 +26,6 @@ namespace Woodman.EntityFrameworkCore.Bulk.EntityInfo
 
             PrimaryKeyColumnName = primaryKeyPropertyAnnotations?.ColumnName;
             PrimaryKeyColumnType = primaryKeyPropertyAnnotations?.ColumnType;
-            IsPrimaryKeyGenerated = primaryKeyProperty?.ValueGenerated != null;
 
             PropertyMappings = EntityType.GetProperties()?.ToList()?.Select(p => new NpgSqlPropertyMapping(p))?.ToList();
         }
