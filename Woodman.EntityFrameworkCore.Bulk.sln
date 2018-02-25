@@ -3,11 +3,17 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 15
 VisualStudioVersion = 15.0.27130.2036
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Woodman.EntityFrameworkCore.Bulk", "Woodman.EntityFrameworkCore.Bulk\Woodman.EntityFrameworkCore.Bulk.csproj", "{B104521A-CA97-4876-99DF-2A80F318C657}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Woodman.EntityFrameworkCore.Bulk", "Woodman.EntityFrameworkCore.Bulk\Woodman.EntityFrameworkCore.Bulk.csproj", "{B104521A-CA97-4876-99DF-2A80F318C657}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Test.Woodman.EntityFrameworkCore.Bulk", "Test.Woodman.EntityFrameworkCore.Bulk\Test.Woodman.EntityFrameworkCore.Bulk.csproj", "{4E038D18-D2C1-430F-B6D9-7D8A72A4E071}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Test.Woodman.EntityFrameworkCore.Bulk", "Test.Woodman.EntityFrameworkCore.Bulk\Test.Woodman.EntityFrameworkCore.Bulk.csproj", "{4E038D18-D2C1-430F-B6D9-7D8A72A4E071}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Test.Woodman.EntityFrameworkCore.DbScaffoldRunner", "Test.Woodman.EntityFrameworkCore.DbScaffoldRunner\Test.Woodman.EntityFrameworkCore.DbScaffoldRunner.csproj", "{6DF9278D-6F89-4534-9650-299071E51950}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Test.Woodman.EntityFrameworkCore.DbScaffoldRunner", "Test.Woodman.EntityFrameworkCore.DbScaffoldRunner\Test.Woodman.EntityFrameworkCore.DbScaffoldRunner.csproj", "{6DF9278D-6F89-4534-9650-299071E51950}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{EC94199D-2A15-40FB-B190-52D955DDA6B5}"
+	ProjectSection(SolutionItems) = preProject
+		LICENSE = LICENSE
+		README.md = README.md
+	EndProjectSection
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
