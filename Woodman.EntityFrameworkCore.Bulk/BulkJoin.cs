@@ -1,6 +1,5 @@
 ﻿using System.Collections.Generic;
 using System.Linq;
-using Woodman.EntityFrameworkCore.Bulk.Extensions;
 
 namespace Microsoft.EntityFrameworkCore
 {
@@ -29,43 +28,8 @@ namespace Microsoft.EntityFrameworkCore
             }
 
             return queryable
-                .GetDbContext()
-                .GetEntityInfo<TEntity>()
+                .BuildBulkExecutor()
                 .Join(queryable, keys, delimiter);
-        }
-
-        internal static IQueryable<TEntity> Join<TEntity>(this IQueryable<TEntity> queryable, IEnumerable<string> keys, char delimiter, InMemEntityInfo entityInfo)
-            where TEntity : class
-        {
-            var primKeys = keys.ToDictionary(k => k);
-
-            return queryable.Where(entity => primKeys.ContainsKey(entityInfo.GetPrimaryKey(entity).ToString()));
-        }
-
-        internal static IQueryable<TEntity> Join<TEntity>(this IQueryable<TEntity> queryable, IEnumerable<string> keys, char delimiter, SqlEntityInfo entityInfo)
-            where TEntity : class
-        {
-            var sql = $@"
-                SELECT a.* FROM dbo.{entityInfo.TableName} a
-                JOIN dbo.Split({"{0}"}, '{delimiter}') as b ON a.{entityInfo.PrimaryKeyColumnName} = b.[Data]";
-
-            var escapedKeys = keys.Select(k => k.Replace("'", "''"));
-
-            return queryable.FromSql(sql, string.Join($"{delimiter}", escapedKeys));
-        }
-
-        internal static IQueryable<TEntity> Join<TEntity>(this IQueryable<TEntity> queryable, IEnumerable<string> keys, char delimiter, NpgSqlEntityInfo entityInfo)
-            where TEntity : class
-        {
-            var keyType = entityInfo.PrimaryKeyColumnType;
-
-            var sql = $@"
-                SELECT a.* FROM {entityInfo.TableName} a
-                JOIN (select regexp_split_to_table({"{0}"}, '{delimiter}') as id) as b ON cast(b.id as {keyType}) = a.{entityInfo.PrimaryKeyColumnName}";
-
-            var escapedKeys = keys.Select(k => k.Replace("'", "''"));
-
-            return queryable.FromSql(sql, string.Join($"{delimiter}", escapedKeys));
         }
     }
 }

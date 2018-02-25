@@ -1,5 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.ChangeTracking.Internal;
+﻿using Microsoft.EntityFrameworkCore.ChangeTracking.Internal;
 using Microsoft.EntityFrameworkCore.Query;
 using Microsoft.EntityFrameworkCore.Query.ExpressionVisitors.Internal;
 using Microsoft.EntityFrameworkCore.Query.Internal;
@@ -7,17 +6,44 @@ using Microsoft.EntityFrameworkCore.Storage;
 using Npgsql;
 using Remotion.Linq.Parsing.ExpressionVisitors.TreeEvaluation;
 using Remotion.Linq.Parsing.Structure;
+using System;
 using System.Collections.Generic;
 using System.Data.Common;
 using System.Data.SqlClient;
 using System.Linq;
 using System.Reflection;
 
-
-namespace Woodman.EntityFrameworkCore.Bulk.Extensions
+namespace Microsoft.EntityFrameworkCore
 {
     internal static class IQueryableExtensions
     {
+        internal static IBulkExecutor<TEntity> BuildBulkExecutor<TEntity>(this IQueryable<TEntity> queryable) where TEntity : class
+        {
+            IBulkExecutor<TEntity> executor = null;
+
+            var dbContext = queryable.GetDbContext();
+
+            if (dbContext.Database.IsSqlServer())
+            {
+                executor = new SqlServerBulkExecutor<TEntity>(dbContext);
+            }
+            else if (dbContext.Database.IsNpgsql())
+            {
+                executor = new NpgSqlBulkExecutor<TEntity>(dbContext);
+            }
+            else if (dbContext.Database.IsInMemory())
+            {
+                executor = new InMemBulkExecutor<TEntity>(dbContext);
+            }
+
+            if (executor == null)
+            {
+                throw new Exception($"Unsupported {nameof(dbContext.Database.ProviderName)} {dbContext.Database.ProviderName}.");
+            }
+
+            return executor;
+        }
+
         internal static DbContext GetDbContext<T>(this IQueryable<T> queryable)
         {
             var queryCompiler = queryable.Provider.Get<QueryCompiler>(StaticFields.QueryCompilerField);
@@ -43,7 +69,7 @@ namespace Woodman.EntityFrameworkCore.Bulk.Extensions
 
             if (stateManager == null)
             {
-                if (stateManagerDynamic is Microsoft.EntityFrameworkCore.Internal.LazyRef<IStateManager> lazyStateManager)
+                if (stateManagerDynamic is Internal.LazyRef<IStateManager> lazyStateManager)
                 {
                     stateManager = lazyStateManager.Value;
                 }

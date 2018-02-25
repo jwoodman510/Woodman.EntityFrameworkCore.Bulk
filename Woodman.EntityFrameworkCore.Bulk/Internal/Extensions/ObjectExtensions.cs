@@ -1,6 +1,6 @@
 ﻿using System.Reflection;
 
-namespace Woodman.EntityFrameworkCore.Bulk.Extensions
+namespace Microsoft.EntityFrameworkCore
 {
     internal static class ObjectExtensions
     {

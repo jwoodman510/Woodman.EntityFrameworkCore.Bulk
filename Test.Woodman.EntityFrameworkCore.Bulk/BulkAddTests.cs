@@ -65,6 +65,7 @@ namespace Test.Woodman.EntityFrameworkCore.Bulk
                 {
                     var added = await db.EfCoreTest.FindAsync(e.Id);
 
+                    Assert.NotNull(added);
                     Assert.Equal(e.Name, added.Name);
                 }
             }
@@ -93,6 +94,7 @@ namespace Test.Woodman.EntityFrameworkCore.Bulk
                 {
                     var added = await db.Efcoretest.FindAsync(e.Id);
 
+                    Assert.NotNull(added);
                     Assert.Equal(e.Name, added.Name);
                 }
             }
@@ -122,6 +124,7 @@ namespace Test.Woodman.EntityFrameworkCore.Bulk
                 {
                     var added = await db.EfCoreTest.FindAsync(e.Id);
 
+                    Assert.NotNull(added);
                     Assert.Equal(e.Name, added.Name);
                 }
             }

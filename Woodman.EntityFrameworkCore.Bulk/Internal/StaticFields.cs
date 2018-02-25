@@ -3,9 +3,9 @@ using Microsoft.EntityFrameworkCore.Storage;
 using System.Linq;
 using System.Reflection;
 
-namespace Woodman.EntityFrameworkCore.Bulk
+namespace Microsoft.EntityFrameworkCore
 {
-    public static class StaticFields
+    internal static class StaticFields
     {
         internal static readonly TypeInfo QueryCompilerTypeInfo = typeof(QueryCompiler).GetTypeInfo();
 
