@@ -1,5 +1,4 @@
 ﻿using Npgsql;
-using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Data.Common;
@@ -7,7 +6,6 @@ using System.Data.SqlClient;
 using System.Linq;
 using System.Threading.Tasks;
 using Woodman.EntityFrameworkCore.Bulk;
-using Woodman.EntityFrameworkCore.Bulk.EntityInfo;
 using Woodman.EntityFrameworkCore.Bulk.Extensions;
 
 namespace Microsoft.EntityFrameworkCore
@@ -24,27 +22,13 @@ namespace Microsoft.EntityFrameworkCore
             }
 
             var dbContext = queryable.GetDbContext();
-            var entityInfo = dbContext.GetEntityInfo<TEntity>();
 
-            if (entityInfo is InMemEntityInfo inMemEntityInfo)
-            {
-                return await queryable.BulkMergeAsync(current, dbContext, inMemEntityInfo);
-            }
-            else if (entityInfo is NpgSqlEntityInfo npgSqlEntityInfo)
-            {
-                return await queryable.BulkMergeAsync(current, dbContext, npgSqlEntityInfo);
-            }
-            else if (entityInfo is SqlEntityInfo sqlEntityInfo)
-            {
-                return await queryable.BulkMergeAsync(current, dbContext, sqlEntityInfo);
-            }
-            else
-            {
-                throw new Exception($"Unsupported {nameof(dbContext.Database.ProviderName)} {dbContext.Database.ProviderName}.");
-            }
+            return await dbContext
+                .GetEntityInfo<TEntity>()
+                .BulkMergeAsync(queryable, current, dbContext);            
         }
 
-        private static async Task<int> BulkMergeAsync<TEntity>(this IQueryable<TEntity> queryable, List<TEntity> current, DbContext dbContext, InMemEntityInfo entityInfo)
+        internal static async Task<int> BulkMergeAsync<TEntity>(this IQueryable<TEntity> queryable, List<TEntity> current, DbContext dbContext, InMemEntityInfo entityInfo)
             where TEntity : class
         {
             var previous = await queryable.ToListAsync();
@@ -78,7 +62,7 @@ namespace Microsoft.EntityFrameworkCore
             return await dbContext.SaveChangesAsync();
         }
 
-        private static async Task<int> BulkMergeAsync<TEntity>(this IQueryable<TEntity> queryable, List<TEntity> current, DbContext dbContext, SqlEntityInfo entityInfo)
+        internal static async Task<int> BulkMergeAsync<TEntity>(this IQueryable<TEntity> queryable, List<TEntity> current, DbContext dbContext, SqlEntityInfo entityInfo)
             where TEntity : class
         {
             var deltaSql = string.Join(",", current.Select(entity =>
@@ -126,7 +110,7 @@ namespace Microsoft.EntityFrameworkCore
             return await ExecuteSqlCmdAsync(current, dbContext, entityInfo, sqlCmd, parameters.Select(p => new SqlParameter(p.ParameterName, p.Value)));
         }
 
-        private static async Task<int> BulkMergeAsync<TEntity>(this IQueryable<TEntity> queryable, List<TEntity> current, DbContext dbContext, NpgSqlEntityInfo entityInfo)
+        internal static async Task<int> BulkMergeAsync<TEntity>(this IQueryable<TEntity> queryable, List<TEntity> current, DbContext dbContext, NpgSqlEntityInfo entityInfo)
             where TEntity : class
         {
             var tableVar = $"_m_{typeof(TEntity).Name}";

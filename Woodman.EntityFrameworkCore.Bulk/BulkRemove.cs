@@ -1,12 +1,8 @@
-﻿using Microsoft.EntityFrameworkCore;
-using Npgsql;
-using System;
+﻿using Npgsql;
 using System.Collections.Generic;
-using System.Data.Common;
 using System.Data.SqlClient;
 using System.Linq;
 using System.Threading.Tasks;
-using Woodman.EntityFrameworkCore.Bulk.EntityInfo;
 using Woodman.EntityFrameworkCore.Bulk.Extensions;
 
 namespace Microsoft.EntityFrameworkCore
@@ -14,31 +10,31 @@ namespace Microsoft.EntityFrameworkCore
     public static class BulkRemove
     {
         public static async Task<int> BulkRemoveAsync<TEntity>(this IQueryable<TEntity> queryable)
-        where TEntity : class, new()
+            where TEntity : class
         {
             return await queryable.BulkRemoveAsync(new string[0], false);
         }
 
         public static async Task<int> BulkRemoveAsync<TEntity>(this IQueryable<TEntity> queryable, IEnumerable<int> keys)
-        where TEntity : class, new()
+            where TEntity : class
         {
             return await queryable.BulkRemoveAsync(keys, true);
         }
 
         public static async Task<int> BulkRemoveAsync<TEntity>(this IQueryable<TEntity> queryable, IEnumerable<long> keys)
-            where TEntity : class, new()
+            where TEntity : class
         {
             return await queryable.BulkRemoveAsync(keys, true);
         }
 
         public static async Task<int> BulkRemoveAsync<TEntity>(this IQueryable<TEntity> queryable, IEnumerable<string> keys)
-        where TEntity : class, new()
+            where TEntity : class
         {
             return await queryable.BulkRemoveAsync(keys, true);
         }
 
-        private static async Task<int> BulkRemoveAsync<TKey, TEntity>(this IQueryable<TEntity> queryable, IEnumerable<TKey> keys, bool hasKeys)
-        where TEntity : class, new()
+        internal static async Task<int> BulkRemoveAsync<TKey, TEntity>(this IQueryable<TEntity> queryable, IEnumerable<TKey> keys, bool hasKeys)
+            where TEntity : class
         {
             var toRemove = keys?.ToList() ?? new List<TKey>();
 
@@ -48,28 +44,14 @@ namespace Microsoft.EntityFrameworkCore
             }
 
             var dbContext = queryable.GetDbContext();
-            var entityInfo = dbContext.GetEntityInfo<TEntity>();
 
-            if (entityInfo is InMemEntityInfo inMemEntityInfo)
-            {
-                return queryable.BulkRemoveAsync(hasKeys, toRemove, dbContext, inMemEntityInfo);
-            }
-            else if (entityInfo is NpgSqlEntityInfo npgSqlEntityInfo)
-            {
-                return await queryable.BulkRemoveAsync(keys, hasKeys, dbContext, npgSqlEntityInfo);
-            }
-            else if (entityInfo is SqlEntityInfo sqlEntityInfo)
-            {
-                return await queryable.BulkRemoveSqlAsync(keys, hasKeys, dbContext, sqlEntityInfo);
-            }
-            else
-            {
-                throw new Exception($"Unsupported {nameof(dbContext.Database.ProviderName)} {dbContext.Database.ProviderName}.");
-            }
+            return await dbContext
+                .GetEntityInfo<TEntity>()
+                .BulkRemoveAsync(queryable, hasKeys, toRemove, dbContext);
         }
 
-        private static int BulkRemoveAsync<TKey, TEntity>(this IQueryable<TEntity> queryable, bool hasKeys, List<TKey> toRemove, DbContext dbContext, InMemEntityInfo entityInfo)
-            where TEntity : class, new()
+        internal static Task<int> BulkRemoveAsync<TKey, TEntity>(this IQueryable<TEntity> queryable, List<TKey> toRemove, bool hasKeys, DbContext dbContext, InMemEntityInfo entityInfo)
+            where TEntity : class
         {
             var primKeys = toRemove.ToDictionary(k => k.ToString());
 
@@ -89,11 +71,11 @@ namespace Microsoft.EntityFrameworkCore
                 dbContext.SaveChanges();
             }
 
-            return entities.Count;
+            return Task.FromResult(entities.Count);
         }
 
-        private static async Task<int> BulkRemoveAsync<TKey, TEntity>(this IQueryable<TEntity> queryable, IEnumerable<TKey> keys, bool hasKeys, DbContext dbContext, NpgSqlEntityInfo entityInfo)
-            where TEntity : class, new()
+        internal static async Task<int> BulkRemoveAsync<TKey, TEntity>(this IQueryable<TEntity> queryable, IEnumerable<TKey> keys, bool hasKeys, DbContext dbContext, NpgSqlEntityInfo entityInfo)
+            where TEntity : class
         {
             var alias = $"d_{entityInfo.TableName}";
             var qryAlias = $"q_{entityInfo.TableName}";
@@ -135,8 +117,8 @@ namespace Microsoft.EntityFrameworkCore
             return await dbContext.Database.ExecuteSqlCommandAsync(sqlCmd, sqlParams);
         }
 
-        private static async Task<int> BulkRemoveSqlAsync<TKey, TEntity>(this IQueryable<TEntity> queryable, IEnumerable<TKey> keys, bool hasKeys, DbContext dbContext, SqlEntityInfo entityInfo)
-            where TEntity : class, new()
+        internal static async Task<int> BulkRemoveAsync<TKey, TEntity>(this IQueryable<TEntity> queryable, IEnumerable<TKey> keys, bool hasKeys, DbContext dbContext, SqlEntityInfo entityInfo)
+            where TEntity : class
         {
             var alias = $"d_{entityInfo.TableName}";
             var qryAlias = $"q_{entityInfo.TableName}";

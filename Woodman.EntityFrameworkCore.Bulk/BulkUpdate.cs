@@ -1,12 +1,10 @@
-﻿using Microsoft.EntityFrameworkCore;
-using Npgsql;
+﻿using Npgsql;
 using System;
 using System.Collections.Generic;
 using System.Data.SqlClient;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Threading.Tasks;
-using Woodman.EntityFrameworkCore.Bulk.EntityInfo;
 using Woodman.EntityFrameworkCore.Bulk.Extensions;
 
 namespace Microsoft.EntityFrameworkCore
@@ -14,7 +12,7 @@ namespace Microsoft.EntityFrameworkCore
     public static class BulkUpdate
     {
         public static async Task<int> BulkUpdateAsync<TEntity>(this IQueryable<TEntity> queryable, Expression<Func<TEntity>> updateFactory)
-            where TEntity : class, new()
+            where TEntity : class
         {
             var memberInitExpression = EnsureMemberInitExpression(updateFactory);
             var updateFunc = updateFactory.Compile();
@@ -28,46 +26,32 @@ namespace Microsoft.EntityFrameworkCore
             }
 
             var dbContext = queryable.GetDbContext();
-            var entityInfo = dbContext.GetEntityInfo<TEntity>();
 
-            if (entityInfo is InMemEntityInfo inMemEntityInfo)
-            {
-                return queryable.BulkUpdateAsync(updatedEntity, updateProperties, dbContext);
-            }
-            else if (entityInfo is NpgSqlEntityInfo npgSqlEntityInfo)
-            {
-                return await queryable.BulkUpdateAsync(updatedEntity, updateProperties, dbContext, npgSqlEntityInfo);
-            }
-            else if (entityInfo is SqlEntityInfo sqlEntityInfo)
-            {
-                return await queryable.BulkUpdateAsync(updatedEntity, updateProperties, dbContext, sqlEntityInfo);
-            }
-            else
-            {
-                throw new Exception($"Unsupported {nameof(dbContext.Database.ProviderName)} {dbContext.Database.ProviderName}.");
-            }
+            return await dbContext
+                .GetEntityInfo<TEntity>()
+                .BulkUpdateAsync(queryable, updatedEntity, updateProperties, dbContext);
         }
 
         public static async Task<int> BulkUpdateAsync<TEntity>(this IQueryable<TEntity> queryable, IEnumerable<int> keys, Expression<Func<int, TEntity>> updateFactory)
-            where TEntity : class, new()
+            where TEntity : class
         {
             return await queryable.BulkUpdateAsync<int, TEntity>(keys, updateFactory);
         }
 
         public static async Task<int> BulkUpdateAsync<TEntity>(this IQueryable<TEntity> queryable, IEnumerable<long> keys, Expression<Func<long, TEntity>> updateFactory)
-            where TEntity : class, new()
+            where TEntity : class
         {
             return await queryable.BulkUpdateAsync<long, TEntity>(keys, updateFactory);
         }
 
         public static async Task<int> BulkUpdateAsync<TEntity>(this IQueryable<TEntity> queryable, IEnumerable<string> keys, Expression<Func<string, TEntity>> updateFactory)
-        where TEntity : class, new()
+            where TEntity : class
         {
             return await queryable.BulkUpdateAsync<string, TEntity>(keys, updateFactory);
         }
 
-        private static async Task<int> BulkUpdateAsync<TKey, TEntity>(this IQueryable<TEntity> queryable, IEnumerable<TKey> keys, Expression<Func<TKey, TEntity>> updateFactory)
-        where TEntity : class, new()
+        internal static async Task<int> BulkUpdateAsync<TKey, TEntity>(this IQueryable<TEntity> queryable, IEnumerable<TKey> keys, Expression<Func<TKey, TEntity>> updateFactory)
+            where TEntity : class
         {
             var toUpdate = keys?.ToList() ?? new List<TKey>();
 
@@ -90,28 +74,14 @@ namespace Microsoft.EntityFrameworkCore
             var updateFunc = updateFactory.Compile();
 
             var dbContext = queryable.GetDbContext();
-            var entityInfo = dbContext.GetEntityInfo<TEntity>();
 
-            if (entityInfo is InMemEntityInfo inMemEntityInfo)
-            {
-                return queryable.BulkUpdateAsync(toUpdate, updateProperties, updateFunc, dbContext, inMemEntityInfo);
-            }
-            else if (entityInfo is NpgSqlEntityInfo npgSqlEntityInfo)
-            {
-                return await queryable.BulkUpdateAsync(keys, updateProperties, updateFunc, dbContext, npgSqlEntityInfo);
-            }
-            else if (entityInfo is SqlEntityInfo sqlEntityInfo)
-            {
-                return await queryable.BulkUpdateAsync(keys, updateProperties, updateFunc, dbContext, sqlEntityInfo);
-            }
-            else
-            {
-                throw new Exception($"Unsupported {nameof(dbContext.Database.ProviderName)} {dbContext.Database.ProviderName}.");
-            }
+            return await dbContext
+                .GetEntityInfo<TEntity>()
+                .BulkUpdateAsync(queryable, toUpdate, updateProperties, updateFunc, dbContext);
         }
 
-        private static async Task<int> BulkUpdateAsync<TEntity>(this IQueryable<TEntity> queryable, TEntity updatedEntity, List<string> updateProperties, DbContext dbContext, SqlEntityInfo entityInfo)
-            where TEntity : class, new()
+        internal static async Task<int> BulkUpdateAsync<TEntity>(this IQueryable<TEntity> queryable, TEntity updatedEntity, List<string> updateProperties, DbContext dbContext, SqlEntityInfo entityInfo)
+            where TEntity : class
         {
             var alias = $"u_{entityInfo.TableName}";
             var qryAlias = $"q_{entityInfo.TableName}";
@@ -145,8 +115,8 @@ namespace Microsoft.EntityFrameworkCore
             return await dbContext.Database.ExecuteSqlCommandAsync(sqlCmd, sqlParams);
         }
 
-        private static async Task<int> BulkUpdateAsync<TEntity>(this IQueryable<TEntity> queryable, TEntity updatedEntity, List<string> updateProperties, DbContext dbContext, NpgSqlEntityInfo entityInfo)
-            where TEntity : class, new()
+        internal static async Task<int> BulkUpdateAsync<TEntity>(this IQueryable<TEntity> queryable, TEntity updatedEntity, List<string> updateProperties, DbContext dbContext, NpgSqlEntityInfo entityInfo)
+            where TEntity : class
         {
             var alias = $"u_{entityInfo.TableName}";
             var qryAlias = $"q_{entityInfo.TableName}";
@@ -179,7 +149,8 @@ namespace Microsoft.EntityFrameworkCore
             return await dbContext.Database.ExecuteSqlCommandAsync(sqlCmd, sqlParams);
         }
 
-        private static int BulkUpdateAsync<TEntity>(this IQueryable<TEntity> queryable, TEntity updatedEntity, List<string> updateProperties, DbContext dbContext) where TEntity : class, new()
+        internal static Task<int> BulkUpdateAsync<TEntity>(this IQueryable<TEntity> queryable, TEntity updatedEntity, List<string> updateProperties, DbContext dbContext, InMemEntityInfo entityInfo)
+            where TEntity : class
         {
             var updatePropDict = updateProperties.ToDictionary(key => key, value => typeof(TEntity).GetProperty(value));
 
@@ -200,11 +171,11 @@ namespace Microsoft.EntityFrameworkCore
                 dbContext.SaveChanges();
             }
 
-            return entities.Count;
+            return Task.FromResult(entities.Count);
         }
 
-        private static async Task<int> BulkUpdateAsync<TKey, TEntity>(this IQueryable<TEntity> queryable, IEnumerable<TKey> keys, List<string> updateProperties, Func<TKey, TEntity> updateFunc, DbContext dbContext, SqlEntityInfo entityInfo)
-            where TEntity : class, new()
+        internal static async Task<int> BulkUpdateAsync<TKey, TEntity>(this IQueryable<TEntity> queryable, IEnumerable<TKey> keys, List<string> updateProperties, Func<TKey, TEntity> updateFunc, DbContext dbContext, SqlEntityInfo entityInfo)
+            where TEntity : class
         {
             var alias = $"u_{entityInfo.TableName}";
             var qryAlias = $"q_{entityInfo.TableName}";
@@ -249,8 +220,8 @@ namespace Microsoft.EntityFrameworkCore
             return await dbContext.Database.ExecuteSqlCommandAsync(sqlCmd, parameters.Select(p => new SqlParameter(p.ParameterName, p.Value)));
         }
 
-        private static async Task<int> BulkUpdateAsync<TKey, TEntity>(this IQueryable<TEntity> queryable, IEnumerable<TKey> keys, List<string> updateProperties, Func<TKey, TEntity> updateFunc, DbContext dbContext, NpgSqlEntityInfo entityInfo)
-            where TEntity : class, new()
+        internal static async Task<int> BulkUpdateAsync<TKey, TEntity>(this IQueryable<TEntity> queryable, IEnumerable<TKey> keys, List<string> updateProperties, Func<TKey, TEntity> updateFunc, DbContext dbContext, NpgSqlEntityInfo entityInfo)
+            where TEntity : class
         {
             var alias = $"u_{entityInfo.TableName}";
             var qryAlias = $"q_{entityInfo.TableName}";
@@ -295,8 +266,8 @@ namespace Microsoft.EntityFrameworkCore
             return count - keyList.Count;
         }
 
-        private static int BulkUpdateAsync<TKey, TEntity>(this IQueryable<TEntity> queryable, List<TKey> toUpdate, List<string> updateProperties, Func<TKey, TEntity> updateFunc, DbContext dbContext, InMemEntityInfo entityInfo)
-            where TEntity : class, new()
+        internal static Task<int> BulkUpdateAsync<TKey, TEntity>(this IQueryable<TEntity> queryable, List<TKey> toUpdate, List<string> updateProperties, Func<TKey, TEntity> updateFunc, DbContext dbContext, InMemEntityInfo entityInfo)
+            where TEntity : class
         {
             var primKeys = toUpdate.ToDictionary(k => k.ToString());
 
@@ -323,7 +294,7 @@ namespace Microsoft.EntityFrameworkCore
                 dbContext.SaveChanges();
             }
 
-            return entities.Count;
+            return Task.FromResult(entities.Count);
         }
 
         private static MemberInitExpression EnsureMemberInitExpression<TEntity>(Expression<Func<TEntity>> updateFactory) where TEntity : class

@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Data;
 using System.Linq;
 using System.Threading.Tasks;
-using Woodman.EntityFrameworkCore.Bulk.EntityInfo;
 using Woodman.EntityFrameworkCore.Bulk.Extensions;
 
 namespace Microsoft.EntityFrameworkCore
@@ -11,7 +10,7 @@ namespace Microsoft.EntityFrameworkCore
     public static class BulkAdd
     {
         public static async Task BulkAddAsync<TEntity>(this DbSet<TEntity> queryable, IEnumerable<TEntity> entities)
-            where TEntity : class, new()
+            where TEntity : class
         {
             var toAdd = entities?.ToList() ?? new List<TEntity>();
 
@@ -21,36 +20,22 @@ namespace Microsoft.EntityFrameworkCore
             }
 
             var dbContext = queryable.GetDbContext();
-            var entityInfo = dbContext.GetEntityInfo<TEntity>();
 
-            if (entityInfo is InMemEntityInfo inMemEntityInfo)
-            {
-                await BulkAddAsync(entities, dbContext);
-            }
-            else if (entityInfo is NpgSqlEntityInfo npgSqlEntityInfo)
-            {
-                await BulkAddAsync(toAdd, dbContext, npgSqlEntityInfo);
-            }
-            else if (entityInfo is SqlEntityInfo sqlEntityInfo)
-            {
-                await BulkAddAsync(toAdd, dbContext, sqlEntityInfo);
-            }
-            else
-            {
-                throw new Exception($"Unsupported {nameof(dbContext.Database.ProviderName)} {dbContext.Database.ProviderName}.");
-            }
+            await dbContext
+                .GetEntityInfo<TEntity>()
+                .BulkAddAsync(toAdd, dbContext);
         }
 
-        private static async Task BulkAddAsync<TEntity>(IEnumerable<TEntity> entities, DbContext dbContext)
-            where TEntity : class, new()
+        internal static async Task BulkAddAsync<TEntity>(IEnumerable<TEntity> entities, DbContext dbContext, InMemEntityInfo entityInfo)
+            where TEntity : class
         {
             await dbContext.AddRangeAsync(entities);
 
             await dbContext.SaveChangesAsync();
         }
 
-        private static async Task BulkAddAsync<TEntity>(List<TEntity> toAdd, DbContext dbContext, NpgSqlEntityInfo entityInfo)
-            where TEntity : class, new()
+        internal static async Task BulkAddAsync<TEntity>(List<TEntity> toAdd, DbContext dbContext, NpgSqlEntityInfo entityInfo)
+            where TEntity : class
         {
             var tableVar = $"_ToAdd_{typeof(TEntity).Name}";
 
@@ -83,8 +68,8 @@ namespace Microsoft.EntityFrameworkCore
             await ExecuteDbCommandAsync(dbContext, sqlCmd, toAdd, entityInfo);
         }
 
-        private static async Task BulkAddAsync<TEntity>(List<TEntity> toAdd, DbContext dbContext, SqlEntityInfo entityInfo)
-            where TEntity : class, new()
+        internal static async Task BulkAddAsync<TEntity>(List<TEntity> toAdd, DbContext dbContext, SqlEntityInfo entityInfo)
+            where TEntity : class
         {
             var tableVar = "@ToAdd";
 
@@ -121,7 +106,7 @@ namespace Microsoft.EntityFrameworkCore
             await ExecuteDbCommandAsync(dbContext, sqlCmd, toAdd, entityInfo);
         }
 
-        private static async Task ExecuteDbCommandAsync<TEntity>(DbContext dbContext, string sqlCmd, List<TEntity> entities, EntityInfoBase entityInfo)
+        internal static async Task ExecuteDbCommandAsync<TEntity>(DbContext dbContext, string sqlCmd, List<TEntity> entities, EntityInfoBase entityInfo)
         {
             var conn = dbContext.Database.GetDbConnection();
 

@@ -1,11 +1,32 @@
 ﻿using Microsoft.EntityFrameworkCore.Metadata;
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
+using System.Threading.Tasks;
 
-namespace Woodman.EntityFrameworkCore.Bulk.EntityInfo
+namespace Microsoft.EntityFrameworkCore
 {
-    internal class EntityInfoBase
+    internal abstract class EntityInfoBase
     {
+        public abstract IQueryable<TEntity> Join<TEntity>(IQueryable<TEntity> queryable, IEnumerable<string> keys, char delimiter)
+            where TEntity : class;
+
+        public abstract Task<int> BulkMergeAsync<TEntity>(IQueryable<TEntity> queryable, List<TEntity> current, DbContext dbContext)
+            where TEntity : class;
+
+        public abstract Task<int> BulkRemoveAsync<TKey, TEntity>(IQueryable<TEntity> queryable, bool hasKeys, List<TKey> toRemove, DbContext dbContext)
+            where TEntity : class;
+
+        public abstract Task BulkAddAsync<TEntity>(List<TEntity> toAdd, DbContext dbContext)
+            where TEntity : class;
+
+        public abstract Task<int> BulkUpdateAsync<TEntity>(IQueryable<TEntity> queryable, TEntity updatedEntity, List<string> updateProperties, DbContext dbContext)
+            where TEntity : class;
+
+        public abstract Task<int> BulkUpdateAsync<TKey, TEntity>(IQueryable<TEntity> queryable, List<TKey> keys, List<string> updateProperties, Func<TKey, TEntity> updateFunc, DbContext dbContext)
+            where TEntity : class;
+
         public bool HasPrimaryKey { get; }
 
         public IEntityType EntityType { get; }

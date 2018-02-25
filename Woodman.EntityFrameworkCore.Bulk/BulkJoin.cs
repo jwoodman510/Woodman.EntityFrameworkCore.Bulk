@@ -1,8 +1,5 @@
-﻿using Microsoft.EntityFrameworkCore;
-using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Linq;
-using Woodman.EntityFrameworkCore.Bulk.EntityInfo;
 using Woodman.EntityFrameworkCore.Bulk.Extensions;
 
 namespace Microsoft.EntityFrameworkCore
@@ -31,28 +28,13 @@ namespace Microsoft.EntityFrameworkCore
                 return queryable.Where(e => false);
             }
 
-            var dbContext = queryable.GetDbContext();
-            var entityInfo = dbContext.GetEntityInfo<TEntity>();
-
-            if (entityInfo is InMemEntityInfo inMemEntityInfo)
-            {
-                return queryable.Join(keys, inMemEntityInfo);
-            }
-            else if (entityInfo is NpgSqlEntityInfo npgSqlEntityInfo)
-            {
-                return queryable.Join(keys, delimiter, npgSqlEntityInfo);
-            }
-            else if (entityInfo is SqlEntityInfo sqlEntityInfo)
-            {
-                return queryable.Join(keys, delimiter, sqlEntityInfo);
-            }
-            else
-            {
-                throw new Exception($"Unsupported {nameof(dbContext.Database.ProviderName)} {dbContext.Database.ProviderName}.");
-            }
+            return queryable
+                .GetDbContext()
+                .GetEntityInfo<TEntity>()
+                .Join(queryable, keys, delimiter);
         }
 
-        private static IQueryable<TEntity> Join<TEntity>(this IQueryable<TEntity> queryable, IEnumerable<string> keys, InMemEntityInfo entityInfo)
+        internal static IQueryable<TEntity> Join<TEntity>(this IQueryable<TEntity> queryable, IEnumerable<string> keys, char delimiter, InMemEntityInfo entityInfo)
             where TEntity : class
         {
             var primKeys = keys.ToDictionary(k => k);
@@ -60,7 +42,7 @@ namespace Microsoft.EntityFrameworkCore
             return queryable.Where(entity => primKeys.ContainsKey(entityInfo.GetPrimaryKey(entity).ToString()));
         }
 
-        private static IQueryable<TEntity> Join<TEntity>(this IQueryable<TEntity> queryable, IEnumerable<string> keys, char delimiter, SqlEntityInfo entityInfo)
+        internal static IQueryable<TEntity> Join<TEntity>(this IQueryable<TEntity> queryable, IEnumerable<string> keys, char delimiter, SqlEntityInfo entityInfo)
             where TEntity : class
         {
             var sql = $@"
@@ -72,7 +54,7 @@ namespace Microsoft.EntityFrameworkCore
             return queryable.FromSql(sql, string.Join($"{delimiter}", escapedKeys));
         }
 
-        private static IQueryable<TEntity> Join<TEntity>(this IQueryable<TEntity> queryable, IEnumerable<string> keys, char delimiter, NpgSqlEntityInfo entityInfo)
+        internal static IQueryable<TEntity> Join<TEntity>(this IQueryable<TEntity> queryable, IEnumerable<string> keys, char delimiter, NpgSqlEntityInfo entityInfo)
             where TEntity : class
         {
             var keyType = entityInfo.PrimaryKeyColumnType;
