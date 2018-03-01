@@ -69,16 +69,9 @@ namespace Microsoft.EntityFrameworkCore
 
         public async Task BulkAddAsync(List<TEntity> entities)
         {
-            if (PrimaryKey.IsCompositeKey)
-            {
-                throw new NotImplementedException();
-            }
-
             var tableVar = "@ToAdd";
 
-            var props = PropertyMappings
-                .Where(p => PrimaryKey.Primary.IsGenerated ? !p.IsPrimaryKey : true)
-                .ToList();
+            var props = PropertyMappings.Where(p => !p.IsGenerated).ToList();
 
             var columnsSql = $@"{string.Join(",", props.Select(p => $@"
                     {p.ColumnName}"))}";
@@ -101,7 +94,8 @@ namespace Microsoft.EntityFrameworkCore
 
                 INSERT INTO dbo.{TableName}
                 ({columnsSql})
-                OUTPUT Inserted.{PrimaryKeyColumnName}
+                OUTPUT {string.Join(",", PrimaryKey.Keys.Select(k => $@"
+                    inserted.{k.ColumnName}"))}
                 SELECT
                 {columnsSql}
                 FROM {tableVar}";
@@ -245,7 +239,7 @@ namespace Microsoft.EntityFrameworkCore
                 VALUES ({insertSourceColumnSql})
                 WHEN NOT MATCHED BY SOURCE THEN
                 DELETE
-                OUTPUT inserted.{PrimaryKeyColumnName}, $action AS action;";
+                OUTPUT $action AS action, inserted.{PrimaryKeyColumnName};";
 
             return await ExecuteSqlCommandAsync(sqlCmd, current, parameters.Select(p => new SqlParameter(p.ParameterName, p.Value)));
         }

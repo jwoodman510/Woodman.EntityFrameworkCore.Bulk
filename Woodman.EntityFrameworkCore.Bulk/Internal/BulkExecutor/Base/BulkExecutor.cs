@@ -116,13 +116,13 @@ namespace Microsoft.EntityFrameworkCore
                         ? keyVal == null
                         : key.DefaultValue.Equals(keyVal);
 
-                    if (!isDefault)
+                    if (isDefault)
                     {
-                        return false;
+                        return true;
                     }
                 }
 
-                return true;
+                return false;
             }
             else
             {

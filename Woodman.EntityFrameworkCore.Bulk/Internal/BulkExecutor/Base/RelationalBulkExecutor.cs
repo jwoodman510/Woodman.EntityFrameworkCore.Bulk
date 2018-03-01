@@ -67,15 +67,37 @@ namespace Microsoft.EntityFrameworkCore
 
                         if (hasActionColumn == false || reader["action"].ToString() == MergeActions.Insert)
                         {
-                            var id = reader[0];
-
-                            for(var i = entityIdIndex; i < entities.Count; i++)
+                            if (PrimaryKey.IsCompositeKey)
                             {
-                                if (IsPrimaryKeyUnset(entities[i]))
+                                for (var i = entityIdIndex; i < entities.Count; i++)
                                 {
-                                    SetPrimaryKey(entities[i], id);
-                                    entityIdIndex = i + 1;
-                                    break;
+                                    if (IsPrimaryKeyUnset(entities[i]))
+                                    {
+                                        var key = new object[PrimaryKey.Keys.Count];
+
+                                        for(var keyIndex = 0; keyIndex < key.Length; keyIndex++)
+                                        {
+                                            key[keyIndex] = hasActionColumn.Value ? reader[keyIndex + 1] : reader[keyIndex];
+                                        }
+
+                                        SetPrimaryKey(entities[i], key);
+                                        entityIdIndex = i + 1;
+                                        break;
+                                    }
+                                }
+                            }
+                            else
+                            {
+                                var id = hasActionColumn.Value ? reader[1] : reader[0];
+
+                                for (var i = entityIdIndex; i < entities.Count; i++)
+                                {
+                                    if (IsPrimaryKeyUnset(entities[i]))
+                                    {
+                                        SetPrimaryKey(entities[i], id);
+                                        entityIdIndex = i + 1;
+                                        break;
+                                    }
                                 }
                             }
                         }
@@ -133,11 +155,14 @@ namespace Microsoft.EntityFrameworkCore
 
         public bool IsPrimaryKey { get; }
 
+        public bool IsGenerated { get; }
+
         public RelationalPropertyMapping(IProperty property)
         {
             _property = property;
             IsNullable = _property?.IsNullable ?? false;
             IsPrimaryKey = _property.IsPrimaryKey();
+            IsGenerated = property.ValueGenerated == ValueGenerated.OnAdd;
 
             var propertyAnnotations = _property.Relational();
 

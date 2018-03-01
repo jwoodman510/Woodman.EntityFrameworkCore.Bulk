@@ -73,16 +73,9 @@ namespace Microsoft.EntityFrameworkCore
 
         public async Task BulkAddAsync(List<TEntity> entities)
         {
-            if (PrimaryKey.IsCompositeKey)
-            {
-                throw new NotImplementedException();
-            }
-
             var tableVar = $"_ToAdd_{typeof(TEntity).Name}";
 
-            var props = PropertyMappings
-                .Where(p => PrimaryKey.Primary.IsGenerated ? !p.IsPrimaryKey : true)
-                .ToList();
+            var props = PropertyMappings.Where(p => !p.IsGenerated).ToList();
 
             var columnsSql = $@"{string.Join(",", props.Select(p => $@"
                     {p.ColumnName}"))}";
@@ -104,7 +97,8 @@ namespace Microsoft.EntityFrameworkCore
                 SELECT
                 {columnsSql}
                 FROM {tableVar}
-                RETURNING {TableName}.id";
+                RETURNING {string.Join(",", PrimaryKey.Keys.Select(k => $@"
+                    {TableName}.{k.ColumnName}"))}";
 
             await ExecuteSqlCommandAsync(sqlCmd, entities);
         }
@@ -274,7 +268,7 @@ namespace Microsoft.EntityFrameworkCore
                 )
                 INSERT INTO _m_results SELECT id, action FROM _out;
 
-                SELECT id, action FROM _m_results;";
+                SELECT action, id FROM _m_results;";
 
             return await ExecuteSqlCommandAsync(sqlCmd, current, parameters.Select(p => new NpgsqlParameter(p.ParameterName, p.Value)));
         }
