@@ -12,9 +12,7 @@ namespace Microsoft.EntityFrameworkCore
 
         public IQueryable<TEntity> Join(IQueryable<TEntity> queryable, IEnumerable<object[]> keys, char delimiter)
         {
-            if (PrimaryKey.IsCompositeKey)
-            {
-                var sql = $@"
+            var sql = $@"
                 DECLARE @Keys TABLE ({string.Join(", ", PrimaryKey.Keys.Select(k => $"{k.ColumnName} {k.ColumnType}"))})
 
                 INSERT INTO @Keys VALUES {string.Join(",", keys.Select(k => $@"
@@ -25,27 +23,11 @@ namespace Microsoft.EntityFrameworkCore
                 JOIN @Keys k ON {string.Join(@"
                     AND", PrimaryKey.Keys.Select(k => $@" a.{k.ColumnName} = k.{k.ColumnName}"))}";
 
-                return queryable.FromSql(sql);
-            }
-            else
-            {
-                var sql = $@"
-                SELECT a.* FROM dbo.{TableName} a
-                JOIN dbo.Split({"{0}"}, '{delimiter}') as b ON a.{PrimaryKeyColumnName} = b.[Data]";
-
-                var escapedKeys = keys.Select(k => k[0].ToString().Replace("'", "''"));
-
-                return queryable.FromSql(sql, string.Join($"{delimiter}", escapedKeys));
-            }            
+            return queryable.FromSql(sql);
         }
 
         public async Task<int> BulkRemoveAsync(IQueryable<TEntity> queryable, bool filterKeys, List<object[]> keys)
         {
-            if (PrimaryKey.IsCompositeKey)
-            {
-                throw new NotImplementedException();
-            }
-
             var alias = $"d_{TableName}";
             var qryAlias = $"q_{TableName}";
             var kAlias = $"k_{TableName}";
@@ -55,29 +37,34 @@ namespace Microsoft.EntityFrameworkCore
 
             var qrySql = queryable.ToSql(out IReadOnlyList<SqlParameter> parameters);
 
-            var keySql = filterKeys
-                ? $"JOIN dbo.Split({keysParam}, '{delimiter}') as {kAlias} ON {kAlias}.[Data] = {alias}.{PrimaryKeyColumnName}"
+            var keyTblSql = filterKeys
+                ? $@"
+                SET NOCOUNT ON
+
+                DECLARE @Keys TABLE ({string.Join(", ", PrimaryKey.Keys.Select(k => $"{k.ColumnName} {k.ColumnType}"))})
+
+                INSERT INTO @Keys VALUES {string.Join(",", keys.Select(k => $@"
+                    ({string.Join(", ", k.Select(val => StringifyKeyVal(val)))})"))}
+                
+                SET NOCOUNT OFF"
+                : string.Empty;
+
+            var keyJoinSql = filterKeys
+                ? $@"JOIN @Keys k ON {string.Join(@"
+                    AND", PrimaryKey.Keys.Select(k => $@" {alias}.{k.ColumnName} = k.{k.ColumnName}"))}"
                 : string.Empty;
 
             var sqlCmd = $@"
+                {keyTblSql}
+
                 DELETE {alias} FROM {TableName} {alias}
                 JOIN (
                     {qrySql}
-                ) AS {qryAlias} ON {qryAlias}.{PrimaryKeyColumnName} = {alias}.{PrimaryKeyColumnName}
-                {keySql}";
+                ) AS {qryAlias} ON {string.Join(@"
+                    AND", PrimaryKey.Keys.Select(k => $@" {alias}.{k.ColumnName} = {qryAlias}.{k.ColumnName}"))}
+                {keyJoinSql}";
 
-            var sqlParams = new List<SqlParameter>();
-
-            if (filterKeys)
-            {
-                var escapedKeys = string.Join(delimiter, keys.Select(k => k[0].ToString().Replace("'", "''")));
-
-                sqlParams.Add(new SqlParameter(keysParam, escapedKeys));
-            }
-
-            sqlParams.AddRange(parameters.Select(p => new SqlParameter(p.ParameterName, p.Value)));
-
-            return await DbContext.Database.ExecuteSqlCommandAsync(sqlCmd, sqlParams);
+            return await DbContext.Database.ExecuteSqlCommandAsync(sqlCmd, parameters.Select(p => new SqlParameter(p.ParameterName, p.Value)));
         }
 
         public async Task BulkAddAsync(List<TEntity> entities)

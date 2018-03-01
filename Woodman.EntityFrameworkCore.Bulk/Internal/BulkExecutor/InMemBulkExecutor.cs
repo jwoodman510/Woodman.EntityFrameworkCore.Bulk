@@ -27,30 +27,29 @@ namespace Microsoft.EntityFrameworkCore
 
         public async Task<int> BulkRemoveAsync(IQueryable<TEntity> queryable, bool filterKeys, List<object[]> keys)
         {
-            if (PrimaryKey.IsCompositeKey)
+            if (filterKeys)
             {
-                throw new NotImplementedException();
+                if (PrimaryKey.IsCompositeKey)
+                {
+                    var primKeys = keys.ToList();
+
+                    DbContext.RemoveRange(queryable.Where(entity => primKeys.Any(k => Enumerable.SequenceEqual(k, GetCompositeKey(entity)))));
+                }
+                else
+                {
+                    var primKeys = new HashSet<string>(keys.Select(k => k[0].ToString()));
+
+                    DbContext.RemoveRange(queryable.Where(entity => primKeys.Contains(GetPrimaryKey(entity).ToString())));
+                }
+            }
+            else
+            {
+                DbContext.RemoveRange(queryable);
             }
 
-            var primKeys = new HashSet<string>(keys.Select(k => k[0].ToString()));
+            var numDeleted = DbContext.SaveChanges();
 
-            var entities = filterKeys
-                ? queryable
-                    .Where(entity => primKeys.Contains(GetPrimaryKey(entity).ToString()))
-                    .ToList()
-                : queryable.ToList();
-
-            foreach (var entity in entities)
-            {
-                DbContext.Remove(entity);
-            }
-
-            if (entities.Count > 0)
-            {
-                DbContext.SaveChanges();
-            }
-
-            return await Task.FromResult(entities.Count);
+            return await Task.FromResult(numDeleted);
         }
 
         public async Task BulkAddAsync(List<TEntity> entities)

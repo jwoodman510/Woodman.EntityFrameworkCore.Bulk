@@ -12,9 +12,7 @@ namespace Microsoft.EntityFrameworkCore
 
         public IQueryable<TEntity> Join(IQueryable<TEntity> queryable, IEnumerable<object[]> keys, char delimiter)
         {
-            if (PrimaryKey.IsCompositeKey)
-            {
-                var sql = $@"
+            var sql = $@"
                 CREATE TEMP TABLE _Keys ({string.Join(", ", PrimaryKey.Keys.Select(k => $"{k.ColumnName} {k.ColumnType}"))});
 
                 INSERT INTO _Keys VALUES {string.Join(",", keys.Select(k => $@"
@@ -25,67 +23,52 @@ namespace Microsoft.EntityFrameworkCore
                 JOIN _Keys k ON {string.Join(@"
                     AND", PrimaryKey.Keys.Select(k => $@" a.{k.ColumnName} = k.{k.ColumnName}"))}";
 
-                return queryable.FromSql(sql);
-            }
-            else
-            {
-                var keyType = PrimaryKeyColumnType;
-
-                var sql = $@"
-                SELECT a.* FROM {TableName} a
-                JOIN (select regexp_split_to_table({"{0}"}, '{delimiter}') as id) as b ON cast(b.id as {keyType}) = a.{PrimaryKeyColumnName}";
-
-                var escapedKeys = keys.Select(k => k[0].ToString().Replace("'", "''"));
-
-                return queryable.FromSql(sql, string.Join($"{delimiter}", escapedKeys));
-            }
+            return queryable.FromSql(sql);
         }
 
         public async Task<int> BulkRemoveAsync(IQueryable<TEntity> queryable, bool filterKeys, List<object[]> keys)
         {
-            if (PrimaryKey.IsCompositeKey)
-            {
-                throw new NotImplementedException();
-            }
-
             var alias = $"d_{TableName}";
             var qryAlias = $"q_{TableName}";
             var kAlias = $"k_{TableName}";
             var keysParam = $"@keys_{TableName}";
 
-            const string delimiter = ",";
-
             var qrySql = queryable.ToSql(out IReadOnlyList<NpgsqlParameter> parameters);
 
             var keyUsingSql = filterKeys
-                ? $",(select regexp_split_to_table({keysParam}, '{delimiter}') as id) as {kAlias}"
+                ? $",_Keys as {kAlias}"
                 : string.Empty;
 
             var keyFilterSql = filterKeys
-                ? $"AND cast({kAlias}.id as {PrimaryKeyColumnType}) = {alias}.{PrimaryKeyColumnName}"
+                ? $@"AND {string.Join(@"
+                    AND", PrimaryKey.Keys.Select(k => $@" {kAlias}.{k.ColumnName} = {qryAlias}.{k.ColumnName}"))}"
+                : string.Empty;
+
+            var tblSql = filterKeys ? $@"
+                CREATE TEMP TABLE _Keys ({string.Join(", ", PrimaryKey.Keys.Select(k => $"{k.ColumnName} {k.ColumnType}"))});
+                
+                INSERT INTO _Keys VALUES {string.Join(",", keys.Select(k => $@"
+                    ({string.Join(", ", k.Select(val => StringifyKeyVal(val)))})"))};"
+                : string.Empty;
+
+            var tblJoinSql = filterKeys ? $@""
                 : string.Empty;
 
             var sqlCmd = $@"
+                {tblSql}
+
                 DELETE FROM {TableName} {alias}
                 USING (
                     {qrySql}
                 ) AS {qryAlias}
                 {keyUsingSql}
-                WHERE {qryAlias}.{PrimaryKeyColumnName} = {alias}.{PrimaryKeyColumnName}
+                WHERE {string.Join(@"
+                    AND", PrimaryKey.Keys.Select(k => $@" {alias}.{k.ColumnName} = {qryAlias}.{k.ColumnName}"))}
                 {keyFilterSql}";
 
-            var sqlParams = new List<NpgsqlParameter>();
+            var rowsAffected = await DbContext.Database.ExecuteSqlCommandAsync(sqlCmd, parameters.Select(p => new NpgsqlParameter(p.ParameterName, p.Value)));
 
-            if (filterKeys)
-            {
-                var escapedKeys = string.Join(delimiter, keys.Select(k => k[0].ToString().Replace("'", "''")));
-
-                sqlParams.Add(new NpgsqlParameter(keysParam, escapedKeys));
-            }
-
-            sqlParams.AddRange(parameters.Select(p => new NpgsqlParameter(p.ParameterName, p.Value)));
-
-            return await DbContext.Database.ExecuteSqlCommandAsync(sqlCmd, sqlParams);
+            return rowsAffected - keys.Count;
         }
 
         public async Task BulkAddAsync(List<TEntity> entities)
