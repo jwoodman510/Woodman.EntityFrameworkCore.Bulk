@@ -9,16 +9,26 @@ namespace Microsoft.EntityFrameworkCore
     {
         public InMemBulkExecutor(DbContext dbContext) : base(dbContext){ }
 
-        public IQueryable<TEntity> Join(IQueryable<TEntity> queryable, IEnumerable<string> keys, char delimiter)
+        public IQueryable<TEntity> Join(IQueryable<TEntity> queryable, IEnumerable<object[]> keys, char delimiter)
         {
-            var primKeys = new HashSet<string>(keys);
+            if (PrimaryKey.IsCompositeKey)
+            {
+                throw new NotImplementedException();
+            }
+
+            var primKeys = new HashSet<string>(keys.Select(k => k[0].ToString()));
 
             return queryable.Where(entity => primKeys.Contains(GetPrimaryKey(entity).ToString()));
         }
 
-        public async Task<int> BulkRemoveAsync<TKey>(IQueryable<TEntity> queryable, bool filterKeys, List<TKey> keys)
+        public async Task<int> BulkRemoveAsync(IQueryable<TEntity> queryable, bool filterKeys, List<object[]> keys)
         {
-            var primKeys = new HashSet<string>(keys.Select(k => k.ToString()));
+            if (PrimaryKey.IsCompositeKey)
+            {
+                throw new NotImplementedException();
+            }
+
+            var primKeys = new HashSet<string>(keys.Select(k => k[0].ToString()));
 
             var entities = filterKeys
                 ? queryable
@@ -69,9 +79,14 @@ namespace Microsoft.EntityFrameworkCore
             return await Task.FromResult(entities.Count);
         }
 
-        public async Task<int> BulkUpdateAsync<TKey>(IQueryable<TEntity> queryable, List<TKey> keys, List<string> updateProperties, Func<TKey, TEntity> updateFunc)
+        public async Task<int> BulkUpdateAsync(IQueryable<TEntity> queryable, List<object[]> keys, List<string> updateProperties, Func<object[], TEntity> updateFunc)
         {
-            var primKeys = keys.ToDictionary(k => k.ToString());
+            if (PrimaryKey.IsCompositeKey)
+            {
+                throw new NotImplementedException();
+            }
+
+            var primKeys = keys.ToDictionary(k => k[0].ToString());
 
             var entities = queryable.Where(entity => primKeys.ContainsKey(GetPrimaryKey(entity).ToString()))
                 .ToList();
@@ -101,6 +116,11 @@ namespace Microsoft.EntityFrameworkCore
 
         public async Task<int> BulkMergeAsync(IQueryable<TEntity> queryable, List<TEntity> current)
         {
+            if (PrimaryKey.IsCompositeKey)
+            {
+                throw new NotImplementedException();
+            }
+
             var previous = await queryable.ToListAsync();
 
             var toDelete = previous

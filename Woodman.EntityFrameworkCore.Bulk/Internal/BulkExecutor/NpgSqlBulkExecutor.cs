@@ -10,21 +10,31 @@ namespace Microsoft.EntityFrameworkCore
     {
         public NpgSqlBulkExecutor(DbContext dbContext) : base(dbContext) { }
 
-        public IQueryable<TEntity> Join(IQueryable<TEntity> queryable, IEnumerable<string> keys, char delimiter)
+        public IQueryable<TEntity> Join(IQueryable<TEntity> queryable, IEnumerable<object[]> keys, char delimiter)
         {
+            if (PrimaryKey.IsCompositeKey)
+            {
+                throw new NotImplementedException();
+            }
+
             var keyType = PrimaryKeyColumnType;
 
             var sql = $@"
                 SELECT a.* FROM {TableName} a
                 JOIN (select regexp_split_to_table({"{0}"}, '{delimiter}') as id) as b ON cast(b.id as {keyType}) = a.{PrimaryKeyColumnName}";
 
-            var escapedKeys = keys.Select(k => k.Replace("'", "''"));
+            var escapedKeys = keys.Select(k => k[0].ToString().Replace("'", "''"));
 
             return queryable.FromSql(sql, string.Join($"{delimiter}", escapedKeys));
         }
 
-        public async Task<int> BulkRemoveAsync<TKey>(IQueryable<TEntity> queryable, bool filterKeys, List<TKey> keys)
+        public async Task<int> BulkRemoveAsync(IQueryable<TEntity> queryable, bool filterKeys, List<object[]> keys)
         {
+            if (PrimaryKey.IsCompositeKey)
+            {
+                throw new NotImplementedException();
+            }
+
             var alias = $"d_{TableName}";
             var qryAlias = $"q_{TableName}";
             var kAlias = $"k_{TableName}";
@@ -55,7 +65,7 @@ namespace Microsoft.EntityFrameworkCore
 
             if (filterKeys)
             {
-                var escapedKeys = string.Join(delimiter, keys.Select(k => k.ToString().Replace("'", "''")));
+                var escapedKeys = string.Join(delimiter, keys.Select(k => k[0].ToString().Replace("'", "''")));
 
                 sqlParams.Add(new NpgsqlParameter(keysParam, escapedKeys));
             }
@@ -67,10 +77,15 @@ namespace Microsoft.EntityFrameworkCore
 
         public async Task BulkAddAsync(List<TEntity> entities)
         {
+            if (PrimaryKey.IsCompositeKey)
+            {
+                throw new NotImplementedException();
+            }
+
             var tableVar = $"_ToAdd_{typeof(TEntity).Name}";
 
             var props = PropertyMappings
-                .Where(p => IsPrimaryKeyGenerated ? !p.IsPrimaryKey : true)
+                .Where(p => PrimaryKey.Primary.IsGenerated ? !p.IsPrimaryKey : true)
                 .ToList();
 
             var columnsSql = $@"{string.Join(",", props.Select(p => $@"
@@ -100,6 +115,11 @@ namespace Microsoft.EntityFrameworkCore
 
         public async Task<int> BulkUpdateAsync(IQueryable<TEntity> queryable, TEntity updatedEntity, List<string> updateProperties)
         {
+            if (PrimaryKey.IsCompositeKey)
+            {
+                throw new NotImplementedException();
+            }
+
             var alias = $"u_{TableName}";
             var qryAlias = $"q_{TableName}";
 
@@ -131,8 +151,13 @@ namespace Microsoft.EntityFrameworkCore
             return await DbContext.Database.ExecuteSqlCommandAsync(sqlCmd, sqlParams);
         }
 
-        public async Task<int> BulkUpdateAsync<TKey>(IQueryable<TEntity> queryable, List<TKey> keys, List<string> updateProperties, Func<TKey, TEntity> updateFunc)
+        public async Task<int> BulkUpdateAsync(IQueryable<TEntity> queryable, List<object[]> keys, List<string> updateProperties, Func<object[], TEntity> updateFunc)
         {
+            if (PrimaryKey.IsCompositeKey)
+            {
+                throw new NotImplementedException();
+            }
+
             var alias = $"u_{TableName}";
             var qryAlias = $"q_{TableName}";
             var deltaAlias = $"d_{TableName}";
@@ -149,7 +174,7 @@ namespace Microsoft.EntityFrameworkCore
             var deltaSql = string.Join(",", keyList.Select(key =>
             {
                 var entity = updateFunc(key);
-                var keyVal = key.ToString().Replace("'", "''");
+                var keyVal = key[0].ToString().Replace("'", "''");
 
                 return $@"
                     ('{keyVal}', {string.Join(", ", propertyMappings.Select(m => $"{m.Value.GetDbValue(entity)}"))})";
@@ -178,6 +203,11 @@ namespace Microsoft.EntityFrameworkCore
 
         public async Task<int> BulkMergeAsync(IQueryable<TEntity> queryable, List<TEntity> current)
         {
+            if (PrimaryKey.IsCompositeKey)
+            {
+                throw new NotImplementedException();
+            }
+
             var tableVar = $"_m_{typeof(TEntity).Name}";
 
             var deltaSql = string.Join(",", current.Select(entity =>
@@ -189,10 +219,10 @@ namespace Microsoft.EntityFrameworkCore
             var qrySql = queryable.ToSql(out IReadOnlyList<NpgsqlParameter> parameters);
 
             var insertProps = PropertyMappings
-                .Where(p => IsPrimaryKeyGenerated ? !p.IsPrimaryKey : true)
+                .Where(p => PrimaryKey.Primary.IsGenerated ? !p.IsPrimaryKey : true)
                 .ToList();
 
-            var updateProperties = PropertyMappings.Where(p => IsPrimaryKeyGenerated ? !p.IsPrimaryKey : true);
+            var updateProperties = PropertyMappings.Where(p => PrimaryKey.Primary.IsGenerated ? !p.IsPrimaryKey : true);
 
             var insertColumnSql = $@"{string.Join(",", insertProps.Select(p => $@"
                     {p.ColumnName}"))}";
