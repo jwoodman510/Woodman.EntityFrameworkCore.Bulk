@@ -105,11 +105,6 @@ namespace Microsoft.EntityFrameworkCore
 
         public async Task<int> BulkUpdateAsync(IQueryable<TEntity> queryable, TEntity updatedEntity, List<string> updateProperties)
         {
-            if (PrimaryKey.IsCompositeKey)
-            {
-                throw new NotImplementedException();
-            }
-
             var alias = $"u_{TableName}";
             var qryAlias = $"q_{TableName}";
 
@@ -136,18 +131,14 @@ namespace Microsoft.EntityFrameworkCore
                 SET {columnSql}
                 FROM (
                    {qrySql}
-                ) AS {qryAlias} WHERE {qryAlias}.{PrimaryKeyColumnName} = {alias}.{PrimaryKeyColumnName}";
+                ) AS {qryAlias} WHERE {string.Join(@"
+                    AND", PrimaryKey.Keys.Select(k => $@" {alias}.{k.ColumnName} = {qryAlias}.{k.ColumnName}"))}";
 
             return await DbContext.Database.ExecuteSqlCommandAsync(sqlCmd, sqlParams);
         }
 
         public async Task<int> BulkUpdateAsync(IQueryable<TEntity> queryable, List<object[]> keys, List<string> updateProperties, Func<object[], TEntity> updateFunc)
         {
-            if (PrimaryKey.IsCompositeKey)
-            {
-                throw new NotImplementedException();
-            }
-
             var alias = $"u_{TableName}";
             var qryAlias = $"q_{TableName}";
             var deltaAlias = $"d_{TableName}";
@@ -164,14 +155,13 @@ namespace Microsoft.EntityFrameworkCore
             var deltaSql = string.Join(",", keyList.Select(key =>
             {
                 var entity = updateFunc(key);
-                var keyVal = key[0].ToString().Replace("'", "''");
 
                 return $@"
-                    ('{keyVal}', {string.Join(", ", propertyMappings.Select(m => $"{m.Value.GetDbValue(entity)}"))})";
+                    ({string.Join(", ", key.Select(keyVal => $"{StringifyKeyVal(keyVal)}"))}, {string.Join(", ", propertyMappings.Select(m => $"{m.Value.GetDbValue(entity)}"))})";
             }));
 
             var sqlCmd = $@"
-                CREATE TEMP TABLE {tableVar} ({PrimaryKeyColumnName} {PrimaryKeyColumnType}, {string.Join(", ", propertyMappings.Select(m => $"{m.Value.ColumnName} {m.Value.ColumnType}"))});
+                CREATE TEMP TABLE {tableVar} ({string.Join(", ", PrimaryKey.Keys.Select(k => $"{k.ColumnName} {k.ColumnType}"))}, {string.Join(", ", propertyMappings.Select(m => $"{m.Value.ColumnName} {m.Value.ColumnType}"))});
 
                 INSERT INTO {tableVar} VALUES
                     {deltaSql};
@@ -183,8 +173,10 @@ namespace Microsoft.EntityFrameworkCore
                 FROM (
                    {qrySql}
                 ) AS {qryAlias}
-                JOIN {tableVar} {deltaAlias} ON {deltaAlias}.{PrimaryKeyColumnName} = {qryAlias}.{PrimaryKeyColumnName}
-                WHERE {qryAlias}.{PrimaryKeyColumnName} = {alias}.{PrimaryKeyColumnName}";
+                JOIN {tableVar} {deltaAlias} ON {string.Join(@"
+                    AND", PrimaryKey.Keys.Select(k => $@" {qryAlias}.{k.ColumnName} = {deltaAlias}.{k.ColumnName}"))}
+                WHERE {string.Join(@"
+                    AND", PrimaryKey.Keys.Select(k => $@" {alias}.{k.ColumnName} = {qryAlias}.{k.ColumnName}"))}";
 
             var count = await DbContext.Database.ExecuteSqlCommandAsync(sqlCmd, parameters.Select(p => new NpgsqlParameter(p.ParameterName, p.Value)));
 

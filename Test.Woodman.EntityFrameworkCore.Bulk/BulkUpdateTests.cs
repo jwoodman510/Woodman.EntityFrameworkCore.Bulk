@@ -14,7 +14,7 @@ namespace Test.Woodman.EntityFrameworkCore.Bulk
 
         public override int InMemId => 11;
 
-        [Fact]
+        [Fact(DisplayName = "Sql Primary Key")]
         public async Task UpdatesSql()
         {
             var toUpdate = SqlIds.Take(2)
@@ -50,7 +50,7 @@ namespace Test.Woodman.EntityFrameworkCore.Bulk
             }
         }
 
-        [Fact]
+        [Fact(DisplayName = "NpgSql Primary Key")]
         public async Task UpdatesNpgSql()
         {
             var toUpdate = NpgSqlIds.Take(2)
@@ -86,7 +86,7 @@ namespace Test.Woodman.EntityFrameworkCore.Bulk
             }
         }
 
-        [Fact]
+        [Fact(DisplayName = "InMem Primary Key")]
         public async Task UpdatesInMem()
         {
             var toUpdate = InMemIds.Take(2)
@@ -122,7 +122,7 @@ namespace Test.Woodman.EntityFrameworkCore.Bulk
             }
         }
 
-        [Fact]
+        [Fact(DisplayName = "Sql")]
         public async Task UpdatesWithoutKeysSql()
         {
             var createdDate = DateTime.UtcNow;
@@ -161,7 +161,7 @@ namespace Test.Woodman.EntityFrameworkCore.Bulk
             }
         }
 
-        [Fact]
+        [Fact(DisplayName = "NpgSql")]
         public async Task UpdatesWithoutKeysNpgSql()
         {
             var createdDate = DateTime.Parse(DateTime.UtcNow.AddDays(1).Date.ToString("d"));
@@ -200,7 +200,7 @@ namespace Test.Woodman.EntityFrameworkCore.Bulk
             }
         }
 
-        [Fact]
+        [Fact(DisplayName = "InMem")]
         public async Task UpdatesWithoutKeysInMem()
         {
             var createdDate = DateTime.UtcNow;
@@ -233,6 +233,120 @@ namespace Test.Woodman.EntityFrameworkCore.Bulk
 
                     var expected = createdDate;
                     var actual = u.CreatedDate;
+
+                    Assert.Equal(expected.ToString("G"), actual.ToString("G"));
+                }
+            }
+        }
+
+        [Fact(DisplayName = "Sql Composite Key")]
+        public async Task UpdatesSqlComposite()
+        {
+            var toUpdate = SqlCompositeIds.Take(2)
+                .ToDictionary(key => key, value => DateTime.UtcNow.AddDays(3));
+
+            using (var db = new woodmanContext())
+            {
+                var result = await db.EfCoreTestChild.BulkUpdateAsync(toUpdate.Select(x => x.Key), id => new EfCoreTestChild
+                {
+                    ModifiedDate = toUpdate[id]
+                });
+
+                Assert.Equal(toUpdate.Count, result);
+            }
+
+            using (var db = new woodmanContext())
+            {
+                var updated = await db.EfCoreTestChild
+                    .Join(toUpdate.Select(y => y.Key))
+                    .ToListAsync();
+
+                Assert.Equal(toUpdate.Count, updated.Count);
+
+                foreach (var u in updated)
+                {
+                    var keyExists = toUpdate.Keys.Any(k => Enumerable.SequenceEqual(new object[] { u.Id, u.EfCoreTestId }, k));
+
+                    Assert.True(keyExists);
+
+                    var expected = toUpdate.First(x => Enumerable.SequenceEqual(new object[] { u.Id, u.EfCoreTestId }, x.Key)).Value;
+                    var actual = u.ModifiedDate;
+
+                    Assert.Equal(expected.ToString("G"), actual.ToString("G"));
+                }
+            }
+        }
+
+        [Fact(DisplayName = "NpgSql Composite Key")]
+        public async Task UpdatesNpgSqlComposite()
+        {
+            var toUpdate = NpgSqlCompositeIds.Take(2)
+                .ToDictionary(key => key, value => DateTime.UtcNow.AddDays(3));
+
+            using (var db = new postgresContext())
+            {
+                var result = await db.Efcoretestchild.BulkUpdateAsync(toUpdate.Select(x => x.Key), id => new Efcoretestchild
+                {
+                    Modifieddate = toUpdate[id]
+                });
+
+                Assert.Equal(toUpdate.Count, result);
+            }
+
+            using (var db = new postgresContext())
+            {
+                var updated = await db.Efcoretestchild
+                    .Join(toUpdate.Select(y => y.Key))
+                    .ToListAsync();
+
+                Assert.Equal(toUpdate.Count, updated.Count);
+
+                foreach (var u in updated)
+                {
+                    var keyExists = toUpdate.Keys.Any(k => Enumerable.SequenceEqual(new object[] { u.Id, u.Efcoretestid }, k));
+
+                    Assert.True(keyExists);
+
+                    var expected = toUpdate.First(x => Enumerable.SequenceEqual(new object[] { u.Id, u.Efcoretestid }, x.Key)).Value;
+                    var actual = u.Modifieddate;
+
+                    Assert.Equal(expected.ToString("d"), actual.ToString("d"));
+                }
+            }
+        }
+
+        [Fact(DisplayName = "InMem Composite Key")]
+        public async Task UpdatesInMemComposite()
+        {
+            var toUpdate = InMemCompositeIds.Take(2)
+                .ToDictionary(key => key, value => DateTime.UtcNow.AddDays(3));
+
+            using (var db = new woodmanContext(InMemDbOpts))
+            {
+                var result = await db.EfCoreTestChild.BulkUpdateAsync(toUpdate.Select(x => x.Key), id => new EfCoreTestChild
+                {
+                    ModifiedDate = toUpdate.First(u => Enumerable.SequenceEqual(id, u.Key)).Value
+                });
+
+                Assert.Equal(toUpdate.Count, result);
+            }
+
+            using (var db = new woodmanContext(InMemDbOpts))
+            {
+                var updated = await db.EfCoreTestChild
+                    .Join(toUpdate.Select(y => y.Key))
+                    .ToListAsync();
+
+                Assert.Equal(toUpdate.Count, updated.Count);
+
+                foreach (var u in updated)
+                {
+                    var keyExists = toUpdate.Keys.Any(k => Enumerable.SequenceEqual(new object[] { u.Id, u.EfCoreTestId }, k));
+
+                    Assert.True(keyExists);
+
+                    var expected = toUpdate.First(x => Enumerable.SequenceEqual(new object[] { u.Id, u.EfCoreTestId }, x.Key)).Value;
+                    var actual = u.ModifiedDate;
 
                     Assert.Equal(expected.ToString("G"), actual.ToString("G"));
                 }

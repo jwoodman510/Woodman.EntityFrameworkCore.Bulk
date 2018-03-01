@@ -84,21 +84,27 @@ namespace Microsoft.EntityFrameworkCore
 
         public async Task<int> BulkUpdateAsync(IQueryable<TEntity> queryable, List<object[]> keys, List<string> updateProperties, Func<object[], TEntity> updateFunc)
         {
+            List<TEntity> entities;
+
             if (PrimaryKey.IsCompositeKey)
             {
-                throw new NotImplementedException();
+                entities = queryable.Where(entity => keys.Any(k => Enumerable.SequenceEqual(GetCompositeKey(entity), k))).ToList();
             }
+            else
+            {
+                var primKeys = new HashSet<string>(keys.Select(k => k[0].ToString()));
 
-            var primKeys = keys.ToDictionary(k => k[0].ToString());
-
-            var entities = queryable.Where(entity => primKeys.ContainsKey(GetPrimaryKey(entity).ToString()))
-                .ToList();
+                entities = queryable.Where(entity => primKeys.Contains(GetPrimaryKey(entity).ToString())).ToList();
+            }
 
             var updatePropDict = updateProperties.ToDictionary(key => key, value => typeof(TEntity).GetProperty(value));
 
             foreach (var entity in entities)
             {
-                var key = primKeys[GetPrimaryKey(entity).ToString()];
+                var key = PrimaryKey.IsCompositeKey
+                    ? GetCompositeKey(entity)
+                    : new object[] { GetPrimaryKey(entity) };
+
                 var updatedEntity = updateFunc(key);
 
                 foreach (var updateProp in updatePropDict)

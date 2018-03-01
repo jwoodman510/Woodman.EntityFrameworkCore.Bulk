@@ -33,8 +33,6 @@ namespace Microsoft.EntityFrameworkCore
             var kAlias = $"k_{TableName}";
             var keysParam = $"@keys_{TableName}";
 
-            const string delimiter = ",";
-
             var qrySql = queryable.ToSql(out IReadOnlyList<SqlParameter> parameters);
 
             var keyTblSql = filterKeys
@@ -105,11 +103,6 @@ namespace Microsoft.EntityFrameworkCore
 
         public async Task<int> BulkUpdateAsync(IQueryable<TEntity> queryable, TEntity updatedEntity, List<string> updateProperties)
         {
-            if (PrimaryKey.IsCompositeKey)
-            {
-                throw new NotImplementedException();
-            }
-
             var alias = $"u_{TableName}";
             var qryAlias = $"q_{TableName}";
 
@@ -137,18 +130,14 @@ namespace Microsoft.EntityFrameworkCore
                 FROM dbo.{TableName} {alias}
                 JOIN (
                    {qrySql}
-                ) AS {qryAlias} ON {qryAlias}.{PrimaryKeyColumnName} = {alias}.{PrimaryKeyColumnName}";
+                ) AS {qryAlias} ON {string.Join(@"
+                    AND", PrimaryKey.Keys.Select(k => $@" {alias}.{k.ColumnName} = {qryAlias}.{k.ColumnName}"))}";
 
             return await DbContext.Database.ExecuteSqlCommandAsync(sqlCmd, sqlParams);
         }
 
         public async Task<int> BulkUpdateAsync(IQueryable<TEntity> queryable, List<object[]> keys, List<string> updateProperties, Func<object[], TEntity> updateFunc)
         {
-            if (PrimaryKey.IsCompositeKey)
-            {
-                throw new NotImplementedException();
-            }
-
             var alias = $"u_{TableName}";
             var qryAlias = $"q_{TableName}";
             var deltaAlias = $"d_{TableName}";
@@ -163,14 +152,13 @@ namespace Microsoft.EntityFrameworkCore
             var deltaSql = string.Join(",", keys.Select(key =>
             {
                 var entity = updateFunc(key);
-                var keyVal = key[0].ToString().Replace("'", "''");
 
                 return $@"
-                    ('{keyVal}', {string.Join(", ", propertyMappings.Select(m => $"{m.Value.GetDbValue(entity)}"))})";
+                    ({string.Join(", ", key.Select(keyVal => $"{StringifyKeyVal(keyVal)}"))}, {string.Join(", ", propertyMappings.Select(m => $"{m.Value.GetDbValue(entity)}"))})";
             }));
 
             var sqlCmd = $@"
-                DECLARE {tableVar} TABLE ({PrimaryKeyColumnName} {PrimaryKeyColumnType}, {string.Join(", ", propertyMappings.Select(m => $"{m.Value.ColumnName} {m.Value.ColumnType}"))})
+                DECLARE {tableVar} TABLE ({string.Join(", ", PrimaryKey.Keys.Select(k => $"{k.ColumnName} {k.ColumnType}"))}, {string.Join(", ", propertyMappings.Select(m => $"{m.Value.ColumnName} {m.Value.ColumnType}"))})
 
                 SET NOCOUNT ON
 
@@ -186,8 +174,10 @@ namespace Microsoft.EntityFrameworkCore
                 FROM dbo.{TableName} {alias}
                 JOIN (
                    {qrySql}
-                ) AS {qryAlias} ON {qryAlias}.{PrimaryKeyColumnName} = {alias}.{PrimaryKeyColumnName}
-                JOIN {tableVar} {deltaAlias} ON {deltaAlias}.{PrimaryKeyColumnName} = {alias}.{PrimaryKeyColumnName}";
+                ) AS {qryAlias} ON {string.Join(@"
+                    AND", PrimaryKey.Keys.Select(k => $@" {alias}.{k.ColumnName} = {qryAlias}.{k.ColumnName}"))}
+                JOIN {tableVar} {deltaAlias} ON {string.Join(@"
+                    AND", PrimaryKey.Keys.Select(k => $@" {alias}.{k.ColumnName} = {deltaAlias}.{k.ColumnName}"))}";
 
             return await DbContext.Database.ExecuteSqlCommandAsync(sqlCmd, parameters.Select(p => new SqlParameter(p.ParameterName, p.Value)));
         }

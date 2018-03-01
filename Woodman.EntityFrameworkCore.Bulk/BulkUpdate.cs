@@ -48,15 +48,35 @@ namespace Microsoft.EntityFrameworkCore
         public static async Task<int> BulkUpdateAsync<TEntity>(this IQueryable<TEntity> queryable, IEnumerable<object[]> keys, Expression<Func<object[], TEntity>> updateFactory)
             where TEntity : class
         {
-            return await queryable.BulkUpdateAsync<object[], TEntity>(keys, updateFactory);
+            var toUpdate = keys?.ToList() ?? new List<object[]>();
+
+            if (toUpdate == null || toUpdate.Count == 0)
+            {
+                return 0;
+            }
+
+            var memberInitExpression = updateFactory.EnsureMemberInitExpression();
+
+            var updateProperties = memberInitExpression.Bindings
+                .Select(b => b.Member.Name)
+                .ToList();
+
+            if (updateProperties.Count == 0)
+            {
+                return 0;
+            }
+
+            var updateFunc = updateFactory.Compile();
+
+            return await queryable
+                .BuildBulkExecutor()
+                .BulkUpdateAsync(queryable, toUpdate, updateProperties, updateFunc);
         }
 
         private static async Task<int> BulkUpdateAsync<TKey, TEntity>(this IQueryable<TEntity> queryable, IEnumerable<TKey> keys, Expression<Func<TKey, TEntity>> updateFactory)
             where TEntity : class
         {
-            var toUpdate = typeof(TKey) == typeof(object[])
-                ? keys?.Select(k => k as object[])?.ToList() ?? new List<object[]>()
-                : keys?.Select(k => new object[] { k })?.ToList() ?? new List<object[]>();
+            var toUpdate = keys?.Select(k => new object[] { k })?.ToList() ?? new List<object[]>();
 
             if (toUpdate == null || toUpdate.Count == 0)
             {
