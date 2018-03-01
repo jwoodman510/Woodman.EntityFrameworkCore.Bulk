@@ -33,12 +33,26 @@ namespace Microsoft.EntityFrameworkCore
 
             public bool IsGenerated { get; }
 
+            public string ColumnName { get; }
+
+            public string ColumnType { get; }
+
             public Key(IProperty property)
             {
                 Name = property.Name;
                 Property = property.PropertyInfo;
                 DefaultValue = Activator.CreateInstance(Property.PropertyType);
                 IsGenerated = property.ValueGenerated == ValueGenerated.OnAdd;
+
+                var relationalInfo = property.Relational();
+
+                if(relationalInfo != null)
+                {
+                    ColumnName = relationalInfo.ColumnName;
+                    ColumnType = property.IsNullable
+                        ? $"{relationalInfo.ColumnType} NULL"
+                        : relationalInfo.ColumnType;
+                }                
             }
         }
     }

@@ -37,6 +37,16 @@ namespace Microsoft.EntityFrameworkCore
             }
         }
 
+        protected object[] GetCompositeKey(TEntity entity)
+        {
+            if (!PrimaryKey.IsCompositeKey)
+            {
+                return null;
+            }
+
+            return PrimaryKey.Keys.Select(k => k.Property.GetValue(entity)).ToArray();
+        }
+
         protected void SetPrimaryKey(TEntity entity, object keyVal)
         {
             if (PrimaryKey.IsCompositeKey)

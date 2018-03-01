@@ -13,12 +13,16 @@ namespace Microsoft.EntityFrameworkCore
         {
             if (PrimaryKey.IsCompositeKey)
             {
-                throw new NotImplementedException();
+                var primKeys = keys.ToList();
+
+                return queryable.Where(entity => primKeys.Any(k => Enumerable.SequenceEqual(k, GetCompositeKey(entity))));
             }
+            else
+            {
+                var primKeys = new HashSet<string>(keys.Select(k => k[0].ToString()));
 
-            var primKeys = new HashSet<string>(keys.Select(k => k[0].ToString()));
-
-            return queryable.Where(entity => primKeys.Contains(GetPrimaryKey(entity).ToString()));
+                return queryable.Where(entity => primKeys.Contains(GetPrimaryKey(entity).ToString()));
+            }
         }
 
         public async Task<int> BulkRemoveAsync(IQueryable<TEntity> queryable, bool filterKeys, List<object[]> keys)

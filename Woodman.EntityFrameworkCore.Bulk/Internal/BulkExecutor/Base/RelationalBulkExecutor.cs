@@ -88,6 +88,16 @@ namespace Microsoft.EntityFrameworkCore
             return numRecordsAffected;
         }
 
+        protected static string StringifyKeyVal(object value)
+        {
+            if (value == null)
+            {
+                return "NULL";
+            }
+
+            return value.ToString().Replace("'", "''");
+        }
+
         private static bool GetHasActionColumn(DbDataReader reader)
         {
             if (reader.CanGetColumnSchema())

@@ -14,16 +14,29 @@ namespace Microsoft.EntityFrameworkCore
         {
             if (PrimaryKey.IsCompositeKey)
             {
-                throw new NotImplementedException();
-            }
+                var sql = $@"
+                DECLARE @Keys TABLE ({string.Join(", ", PrimaryKey.Keys.Select(k => $"{k.ColumnName} {k.ColumnType}"))})
 
-            var sql = $@"
+                INSERT INTO @Keys VALUES {string.Join(",", keys.Select(k => $@"
+                    ({string.Join(", ", k.Select(val => StringifyKeyVal(val)))})"))}
+
+                SELECT a.*
+                FROM dbo.{TableName} a
+                JOIN @Keys k ON {string.Join(@"
+                    AND", PrimaryKey.Keys.Select(k => $@" a.{k.ColumnName} = k.{k.ColumnName}"))}";
+
+                return queryable.FromSql(sql);
+            }
+            else
+            {
+                var sql = $@"
                 SELECT a.* FROM dbo.{TableName} a
                 JOIN dbo.Split({"{0}"}, '{delimiter}') as b ON a.{PrimaryKeyColumnName} = b.[Data]";
 
-            var escapedKeys = keys.Select(k => k[0].ToString().Replace("'", "''"));
+                var escapedKeys = keys.Select(k => k[0].ToString().Replace("'", "''"));
 
-            return queryable.FromSql(sql, string.Join($"{delimiter}", escapedKeys));
+                return queryable.FromSql(sql, string.Join($"{delimiter}", escapedKeys));
+            }            
         }
 
         public async Task<int> BulkRemoveAsync(IQueryable<TEntity> queryable, bool filterKeys, List<object[]> keys)
