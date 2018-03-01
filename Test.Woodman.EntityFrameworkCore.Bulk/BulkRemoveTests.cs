@@ -16,7 +16,7 @@ namespace Test.Woodman.EntityFrameworkCore.Bulk
         [Fact]
         public async Task RemovesSql()
         {
-            var toDelete = SqlIds.Take(5).ToList();
+            var toDelete = SqlIds.Skip(5).Take(5).ToList();
 
             using (var db = new woodmanContext())
             {
@@ -49,7 +49,7 @@ namespace Test.Woodman.EntityFrameworkCore.Bulk
         [Fact]
         public async Task RemovesNpgSql()
         {
-            var toDelete = NpgSqlIds.Take(5).ToList();
+            var toDelete = NpgSqlIds.Skip(5).Take(5).ToList();
 
             using (var db = new postgresContext())
             {

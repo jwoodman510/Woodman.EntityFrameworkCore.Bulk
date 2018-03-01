@@ -124,6 +124,7 @@ namespace Test.Woodman.EntityFrameworkCore.Bulk
             const int numUpdate = 5;
 
             var toMerge = entities
+                .OrderBy(e => e.Id)
                 .Take(numUpdate)
                 .Select(x =>
                 {
