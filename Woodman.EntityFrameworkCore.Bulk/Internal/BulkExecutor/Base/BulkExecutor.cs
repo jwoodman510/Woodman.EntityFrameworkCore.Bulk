@@ -73,24 +73,10 @@ namespace Microsoft.EntityFrameworkCore
         {
             if (PrimaryKey.IsCompositeKey)
             {
-                for(var i = 0; i < PrimaryKey.Keys.Count; i++)
-                {
-                    var key = PrimaryKey.Keys[i];
+                var pk1 = GetCompositeKey(entity1);
+                var pk2 = GetCompositeKey(entity2);
 
-                    var keyVal1 = key.Property.GetValue(entity1);
-                    var keyVal2 = key.Property.GetValue(entity2);
-
-                    var isMatch = keyVal1 == null || keyVal2 == null
-                        ? keyVal1 == null && keyVal2 == null
-                        : keyVal1.Equals(keyVal2);
-
-                    if (!isMatch)
-                    {
-                        return false;
-                    }
-                }
-
-                return true;
+                return Enumerable.SequenceEqual(pk1, pk2);
             }
             else
             {

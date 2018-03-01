@@ -125,11 +125,6 @@ namespace Microsoft.EntityFrameworkCore
 
         public async Task<int> BulkMergeAsync(IQueryable<TEntity> queryable, List<TEntity> current)
         {
-            if (PrimaryKey.IsCompositeKey)
-            {
-                throw new NotImplementedException();
-            }
-
             var previous = await queryable.ToListAsync();
 
             var toDelete = previous

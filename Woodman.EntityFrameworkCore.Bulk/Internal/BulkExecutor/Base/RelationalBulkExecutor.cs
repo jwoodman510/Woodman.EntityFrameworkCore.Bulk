@@ -12,23 +12,12 @@ namespace Microsoft.EntityFrameworkCore
     {
         protected string TableName { get; }
 
-        protected string PrimaryKeyColumnName { get; }
-
-        protected string PrimaryKeyColumnType { get; }
-
         protected List<RelationalPropertyMapping> PropertyMappings { get; }
 
         protected RelationalBulkExecutor(DbContext dbContext)
             : base(dbContext)
         {
             TableName = EntityType.Relational()?.TableName;
-
-            var primaryKeyProperty = EntityType.FindPrimaryKey()?.Properties?.FirstOrDefault();
-            var primaryKeyPropertyAnnotations = primaryKeyProperty?.Relational();
-
-            PrimaryKeyColumnName = primaryKeyPropertyAnnotations?.ColumnName;
-            PrimaryKeyColumnType = primaryKeyPropertyAnnotations?.ColumnType;
-
             PropertyMappings = EntityType.GetProperties()?.ToList()?.Select(p => new RelationalPropertyMapping(p))?.ToList();
         }
 

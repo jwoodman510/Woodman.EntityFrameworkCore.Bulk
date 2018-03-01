@@ -184,11 +184,6 @@ namespace Microsoft.EntityFrameworkCore
 
         public async Task<int> BulkMergeAsync(IQueryable<TEntity> queryable, List<TEntity> current)
         {
-            if (PrimaryKey.IsCompositeKey)
-            {
-                throw new NotImplementedException();
-            }
-
             var deltaSql = string.Join(",", current.Select(entity =>
             {
                 return $@"
@@ -197,13 +192,13 @@ namespace Microsoft.EntityFrameworkCore
 
             var qrySql = queryable.ToSql(out IReadOnlyList<SqlParameter> parameters);
 
-            var updateColumnSql = string.Join(",", PropertyMappings.Where(p => PrimaryKey.Primary.IsGenerated ? !p.IsPrimaryKey : true).Select(p => $@"
+            var updateColumnSql = string.Join(",", PropertyMappings.Where(p => !p.IsGenerated).Select(p => $@"
                 TARGET.{p.ColumnName} = SOURCE.{p.ColumnName}"));
 
-            var insertColumnSql = string.Join(",", PropertyMappings.Where(p => PrimaryKey.Primary.IsGenerated ? !p.IsPrimaryKey : true).Select(p => $@"
+            var insertColumnSql = string.Join(",", PropertyMappings.Where(p => !p.IsGenerated).Select(p => $@"
                 {p.ColumnName}"));
 
-            var insertSourceColumnSql = string.Join(",", PropertyMappings.Where(p => PrimaryKey.Primary.IsGenerated ? !p.IsPrimaryKey : true).Select(p => $@"
+            var insertSourceColumnSql = string.Join(",", PropertyMappings.Where(p => !p.IsGenerated).Select(p => $@"
                 SOURCE.{p.ColumnName}"));
 
             var sqlCmd = $@"
@@ -221,7 +216,9 @@ namespace Microsoft.EntityFrameworkCore
                     {qrySql}
                 )
                 MERGE tgt_cte AS TARGET
-                USING @merge AS SOURCE ON (TARGET.{PrimaryKeyColumnName} = SOURCE.{PrimaryKeyColumnName})
+                USING @merge AS SOURCE ON (
+                    {string.Join(" AND ", PrimaryKey.Keys.Select(k => $@"TARGET.{k.ColumnName} = SOURCE.{k.ColumnName}"))}
+                )
                 WHEN MATCHED THEN
                 UPDATE SET {updateColumnSql}
                 WHEN NOT MATCHED BY TARGET THEN
@@ -229,7 +226,9 @@ namespace Microsoft.EntityFrameworkCore
                 VALUES ({insertSourceColumnSql})
                 WHEN NOT MATCHED BY SOURCE THEN
                 DELETE
-                OUTPUT $action AS action, inserted.{PrimaryKeyColumnName};";
+                OUTPUT
+                    $action AS action, {string.Join(",", PrimaryKey.Keys.Select(k => $@"
+                    inserted.{k.ColumnName}"))};";
 
             return await ExecuteSqlCommandAsync(sqlCmd, current, parameters.Select(p => new SqlParameter(p.ParameterName, p.Value)));
         }
