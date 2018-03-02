@@ -45,10 +45,10 @@ namespace Microsoft.EntityFrameworkCore
             return await queryable.BulkUpdateAsync<string, TEntity>(keys, updateFactory);
         }
 
-        private static async Task<int> BulkUpdateAsync<TKey, TEntity>(this IQueryable<TEntity> queryable, IEnumerable<TKey> keys, Expression<Func<TKey, TEntity>> updateFactory)
+        public static async Task<int> BulkUpdateAsync<TEntity>(this IQueryable<TEntity> queryable, IEnumerable<object[]> keys, Expression<Func<object[], TEntity>> updateFactory)
             where TEntity : class
         {
-            var toUpdate = keys?.ToList() ?? new List<TKey>();
+            var toUpdate = keys?.ToList() ?? new List<object[]>();
 
             if (toUpdate == null || toUpdate.Count == 0)
             {
@@ -71,6 +71,34 @@ namespace Microsoft.EntityFrameworkCore
             return await queryable
                 .BuildBulkExecutor()
                 .BulkUpdateAsync(queryable, toUpdate, updateProperties, updateFunc);
+        }
+
+        private static async Task<int> BulkUpdateAsync<TKey, TEntity>(this IQueryable<TEntity> queryable, IEnumerable<TKey> keys, Expression<Func<TKey, TEntity>> updateFactory)
+            where TEntity : class
+        {
+            var toUpdate = keys?.Select(k => new object[] { k })?.ToList() ?? new List<object[]>();
+
+            if (toUpdate == null || toUpdate.Count == 0)
+            {
+                return 0;
+            }
+
+            var memberInitExpression = updateFactory.EnsureMemberInitExpression();
+
+            var updateProperties = memberInitExpression.Bindings
+                .Select(b => b.Member.Name)
+                .ToList();
+
+            if (updateProperties.Count == 0)
+            {
+                return 0;
+            }
+
+            var updateFunc = updateFactory.Compile();
+
+            return await queryable
+                .BuildBulkExecutor()
+                .BulkUpdateAsync(queryable, toUpdate, updateProperties, objArr => updateFunc((TKey)objArr[0]));
         }   
     }
 }

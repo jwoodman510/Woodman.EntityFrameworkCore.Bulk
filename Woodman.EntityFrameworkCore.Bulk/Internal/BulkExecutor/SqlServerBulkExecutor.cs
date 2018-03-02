@@ -10,60 +10,66 @@ namespace Microsoft.EntityFrameworkCore
     {
         public SqlServerBulkExecutor(DbContext dbContext) : base(dbContext) { }
 
-        public IQueryable<TEntity> Join(IQueryable<TEntity> queryable, IEnumerable<string> keys, char delimiter)
+        public IQueryable<TEntity> Join(IQueryable<TEntity> queryable, IEnumerable<object[]> keys, char delimiter)
         {
             var sql = $@"
-                SELECT a.* FROM dbo.{TableName} a
-                JOIN dbo.Split({"{0}"}, '{delimiter}') as b ON a.{PrimaryKeyColumnName} = b.[Data]";
+                DECLARE @Keys TABLE ({string.Join(", ", PrimaryKey.Keys.Select(k => $"{k.ColumnName} {k.ColumnType}"))})
 
-            var escapedKeys = keys.Select(k => k.Replace("'", "''"));
+                INSERT INTO @Keys VALUES {string.Join(",", keys.Select(k => $@"
+                    ({string.Join(", ", k.Select(val => StringifyKeyVal(val)))})"))}
 
-            return queryable.FromSql(sql, string.Join($"{delimiter}", escapedKeys));
+                SELECT a.*
+                FROM dbo.{TableName} a
+                JOIN @Keys k ON {string.Join(@"
+                    AND", PrimaryKey.Keys.Select(k => $@" a.{k.ColumnName} = k.{k.ColumnName}"))}";
+
+            return queryable.FromSql(sql);
         }
 
-        public async Task<int> BulkRemoveAsync<TKey>(IQueryable<TEntity> queryable, bool filterKeys, List<TKey> keys)
+        public async Task<int> BulkRemoveAsync(IQueryable<TEntity> queryable, bool filterKeys, List<object[]> keys)
         {
             var alias = $"d_{TableName}";
             var qryAlias = $"q_{TableName}";
             var kAlias = $"k_{TableName}";
             var keysParam = $"@keys_{TableName}";
 
-            const string delimiter = ",";
-
             var qrySql = queryable.ToSql(out IReadOnlyList<SqlParameter> parameters);
 
-            var keySql = filterKeys
-                ? $"JOIN dbo.Split({keysParam}, '{delimiter}') as {kAlias} ON {kAlias}.[Data] = {alias}.{PrimaryKeyColumnName}"
+            var keyTblSql = filterKeys
+                ? $@"
+                SET NOCOUNT ON
+
+                DECLARE @Keys TABLE ({string.Join(", ", PrimaryKey.Keys.Select(k => $"{k.ColumnName} {k.ColumnType}"))})
+
+                INSERT INTO @Keys VALUES {string.Join(",", keys.Select(k => $@"
+                    ({string.Join(", ", k.Select(val => StringifyKeyVal(val)))})"))}
+                
+                SET NOCOUNT OFF"
+                : string.Empty;
+
+            var keyJoinSql = filterKeys
+                ? $@"JOIN @Keys k ON {string.Join(@"
+                    AND", PrimaryKey.Keys.Select(k => $@" {alias}.{k.ColumnName} = k.{k.ColumnName}"))}"
                 : string.Empty;
 
             var sqlCmd = $@"
+                {keyTblSql}
+
                 DELETE {alias} FROM {TableName} {alias}
                 JOIN (
                     {qrySql}
-                ) AS {qryAlias} ON {qryAlias}.{PrimaryKeyColumnName} = {alias}.{PrimaryKeyColumnName}
-                {keySql}";
+                ) AS {qryAlias} ON {string.Join(@"
+                    AND", PrimaryKey.Keys.Select(k => $@" {alias}.{k.ColumnName} = {qryAlias}.{k.ColumnName}"))}
+                {keyJoinSql}";
 
-            var sqlParams = new List<SqlParameter>();
-
-            if (filterKeys)
-            {
-                var escapedKeys = string.Join(delimiter, keys.Select(k => k.ToString().Replace("'", "''")));
-
-                sqlParams.Add(new SqlParameter(keysParam, escapedKeys));
-            }
-
-            sqlParams.AddRange(parameters.Select(p => new SqlParameter(p.ParameterName, p.Value)));
-
-            return await DbContext.Database.ExecuteSqlCommandAsync(sqlCmd, sqlParams);
+            return await DbContext.Database.ExecuteSqlCommandAsync(sqlCmd, parameters.Select(p => new SqlParameter(p.ParameterName, p.Value)));
         }
 
         public async Task BulkAddAsync(List<TEntity> entities)
         {
             var tableVar = "@ToAdd";
 
-            var props = PropertyMappings
-                .Where(p => IsPrimaryKeyGenerated ? !p.IsPrimaryKey : true)
-                .ToList();
+            var props = PropertyMappings.Where(p => !p.IsGenerated).ToList();
 
             var columnsSql = $@"{string.Join(",", props.Select(p => $@"
                     {p.ColumnName}"))}";
@@ -86,7 +92,8 @@ namespace Microsoft.EntityFrameworkCore
 
                 INSERT INTO dbo.{TableName}
                 ({columnsSql})
-                OUTPUT Inserted.{PrimaryKeyColumnName}
+                OUTPUT {string.Join(",", PrimaryKey.Keys.Select(k => $@"
+                    inserted.{k.ColumnName}"))}
                 SELECT
                 {columnsSql}
                 FROM {tableVar}";
@@ -123,12 +130,13 @@ namespace Microsoft.EntityFrameworkCore
                 FROM dbo.{TableName} {alias}
                 JOIN (
                    {qrySql}
-                ) AS {qryAlias} ON {qryAlias}.{PrimaryKeyColumnName} = {alias}.{PrimaryKeyColumnName}";
+                ) AS {qryAlias} ON {string.Join(@"
+                    AND", PrimaryKey.Keys.Select(k => $@" {alias}.{k.ColumnName} = {qryAlias}.{k.ColumnName}"))}";
 
             return await DbContext.Database.ExecuteSqlCommandAsync(sqlCmd, sqlParams);
         }
 
-        public async Task<int> BulkUpdateAsync<TKey>(IQueryable<TEntity> queryable, List<TKey> keys, List<string> updateProperties, Func<TKey, TEntity> updateFunc)
+        public async Task<int> BulkUpdateAsync(IQueryable<TEntity> queryable, List<object[]> keys, List<string> updateProperties, Func<object[], TEntity> updateFunc)
         {
             var alias = $"u_{TableName}";
             var qryAlias = $"q_{TableName}";
@@ -144,14 +152,13 @@ namespace Microsoft.EntityFrameworkCore
             var deltaSql = string.Join(",", keys.Select(key =>
             {
                 var entity = updateFunc(key);
-                var keyVal = key.ToString().Replace("'", "''");
 
                 return $@"
-                    ('{keyVal}', {string.Join(", ", propertyMappings.Select(m => $"{m.Value.GetDbValue(entity)}"))})";
+                    ({string.Join(", ", key.Select(keyVal => $"{StringifyKeyVal(keyVal)}"))}, {string.Join(", ", propertyMappings.Select(m => $"{m.Value.GetDbValue(entity)}"))})";
             }));
 
             var sqlCmd = $@"
-                DECLARE {tableVar} TABLE ({PrimaryKeyColumnName} {PrimaryKeyColumnType}, {string.Join(", ", propertyMappings.Select(m => $"{m.Value.ColumnName} {m.Value.ColumnType}"))})
+                DECLARE {tableVar} TABLE ({string.Join(", ", PrimaryKey.Keys.Select(k => $"{k.ColumnName} {k.ColumnType}"))}, {string.Join(", ", propertyMappings.Select(m => $"{m.Value.ColumnName} {m.Value.ColumnType}"))})
 
                 SET NOCOUNT ON
 
@@ -167,8 +174,10 @@ namespace Microsoft.EntityFrameworkCore
                 FROM dbo.{TableName} {alias}
                 JOIN (
                    {qrySql}
-                ) AS {qryAlias} ON {qryAlias}.{PrimaryKeyColumnName} = {alias}.{PrimaryKeyColumnName}
-                JOIN {tableVar} {deltaAlias} ON {deltaAlias}.{PrimaryKeyColumnName} = {alias}.{PrimaryKeyColumnName}";
+                ) AS {qryAlias} ON {string.Join(@"
+                    AND", PrimaryKey.Keys.Select(k => $@" {alias}.{k.ColumnName} = {qryAlias}.{k.ColumnName}"))}
+                JOIN {tableVar} {deltaAlias} ON {string.Join(@"
+                    AND", PrimaryKey.Keys.Select(k => $@" {alias}.{k.ColumnName} = {deltaAlias}.{k.ColumnName}"))}";
 
             return await DbContext.Database.ExecuteSqlCommandAsync(sqlCmd, parameters.Select(p => new SqlParameter(p.ParameterName, p.Value)));
         }
@@ -183,13 +192,13 @@ namespace Microsoft.EntityFrameworkCore
 
             var qrySql = queryable.ToSql(out IReadOnlyList<SqlParameter> parameters);
 
-            var updateColumnSql = string.Join(",", PropertyMappings.Where(p => IsPrimaryKeyGenerated ? !p.IsPrimaryKey : true).Select(p => $@"
+            var updateColumnSql = string.Join(",", PropertyMappings.Where(p => !p.IsGenerated).Select(p => $@"
                 TARGET.{p.ColumnName} = SOURCE.{p.ColumnName}"));
 
-            var insertColumnSql = string.Join(",", PropertyMappings.Where(p => IsPrimaryKeyGenerated ? !p.IsPrimaryKey : true).Select(p => $@"
+            var insertColumnSql = string.Join(",", PropertyMappings.Where(p => !p.IsGenerated).Select(p => $@"
                 {p.ColumnName}"));
 
-            var insertSourceColumnSql = string.Join(",", PropertyMappings.Where(p => IsPrimaryKeyGenerated ? !p.IsPrimaryKey : true).Select(p => $@"
+            var insertSourceColumnSql = string.Join(",", PropertyMappings.Where(p => !p.IsGenerated).Select(p => $@"
                 SOURCE.{p.ColumnName}"));
 
             var sqlCmd = $@"
@@ -207,7 +216,9 @@ namespace Microsoft.EntityFrameworkCore
                     {qrySql}
                 )
                 MERGE tgt_cte AS TARGET
-                USING @merge AS SOURCE ON (TARGET.{PrimaryKeyColumnName} = SOURCE.{PrimaryKeyColumnName})
+                USING @merge AS SOURCE ON (
+                    {string.Join(" AND ", PrimaryKey.Keys.Select(k => $@"TARGET.{k.ColumnName} = SOURCE.{k.ColumnName}"))}
+                )
                 WHEN MATCHED THEN
                 UPDATE SET {updateColumnSql}
                 WHEN NOT MATCHED BY TARGET THEN
@@ -215,7 +226,9 @@ namespace Microsoft.EntityFrameworkCore
                 VALUES ({insertSourceColumnSql})
                 WHEN NOT MATCHED BY SOURCE THEN
                 DELETE
-                OUTPUT inserted.{PrimaryKeyColumnName}, $action AS action;";
+                OUTPUT
+                    $action AS action, {string.Join(",", PrimaryKey.Keys.Select(k => $@"
+                    inserted.{k.ColumnName}"))};";
 
             return await ExecuteSqlCommandAsync(sqlCmd, current, parameters.Select(p => new SqlParameter(p.ParameterName, p.Value)));
         }

@@ -1,8 +1,6 @@
 ﻿using Microsoft.EntityFrameworkCore.Metadata;
-using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Reflection;
 
 namespace Microsoft.EntityFrameworkCore
 {
@@ -14,15 +12,7 @@ namespace Microsoft.EntityFrameworkCore
 
         protected List<IProperty> Properties { get; }
 
-        protected bool HasPrimaryKey { get; }
-
-        protected string PrimaryKeyName { get; }
-
-        protected bool IsPrimaryKeyGenerated { get; }
-
-        protected PropertyInfo PrimaryKeyProperty { get; }
-
-        protected object PrimaryKeyDefaultValue { get; }
+        protected PrimaryKey PrimaryKey { get; }
 
         protected BulkExecutor(DbContext dbContext)
         {
@@ -32,41 +22,102 @@ namespace Microsoft.EntityFrameworkCore
 
             Properties = EntityType.GetProperties()?.ToList();
 
-            var pk = EntityType.FindPrimaryKey();
-
-            HasPrimaryKey = pk != null;
-
-            if (HasPrimaryKey)
-            {
-                PrimaryKeyName = pk.Properties[0].Name;
-                PrimaryKeyProperty = pk.Properties[0].PropertyInfo;
-                PrimaryKeyDefaultValue = Activator.CreateInstance(PrimaryKeyProperty.PropertyType);
-                IsPrimaryKeyGenerated = pk.Properties[0].ValueGenerated == ValueGenerated.OnAdd;
-            }
+            PrimaryKey = new PrimaryKey(EntityType);
         }
 
         protected object GetPrimaryKey(TEntity entity)
         {
-            return PrimaryKeyProperty.GetValue(entity);
+            if (PrimaryKey.IsCompositeKey)
+            {
+                return PrimaryKey.Keys.Select(k => k.Property.GetValue(entity)).ToArray();
+            }
+            else
+            {
+                return PrimaryKey.Primary.Property.GetValue(entity);
+            }
+        }
+
+        protected object[] GetCompositeKey(TEntity entity)
+        {
+            if (!PrimaryKey.IsCompositeKey)
+            {
+                return null;
+            }
+
+            return PrimaryKey.Keys.Select(k => k.Property.GetValue(entity)).ToArray();
         }
 
         protected void SetPrimaryKey(TEntity entity, object keyVal)
         {
-            PrimaryKeyProperty.SetValue(entity, keyVal);
+            if (PrimaryKey.IsCompositeKey)
+            {
+                var keyVals = keyVal as object[];
+
+                if(keyVals == null)
+                {
+                    return;
+                }
+
+                for(var i = 0; i < keyVals.Length; i++)
+                {
+                    PrimaryKey.Keys[i].Property.SetValue(entity, keyVals[i]);
+                }
+            }
+            else
+            {
+                PrimaryKey.Primary.Property.SetValue(entity, keyVal);
+            }
         }
 
         protected bool PrimaryKeyEquals(TEntity entity1, TEntity entity2)
         {
-            return GetPrimaryKey(entity1)?.Equals(GetPrimaryKey(entity2)) ?? false;
+            if (PrimaryKey.IsCompositeKey)
+            {
+                var pk1 = GetCompositeKey(entity1);
+                var pk2 = GetCompositeKey(entity2);
+
+                return Enumerable.SequenceEqual(pk1, pk2);
+            }
+            else
+            {
+                var keyVal1 = GetPrimaryKey(entity1);
+                var keyVal2 = GetPrimaryKey(entity2);
+
+                return keyVal1 == null || keyVal2 == null
+                        ? keyVal1 == null && keyVal2 == null
+                        : keyVal1.Equals(keyVal2);
+            }
         }
 
         protected bool IsPrimaryKeyUnset(TEntity entity)
         {
-            var val = GetPrimaryKey(entity);
+            if (PrimaryKey.IsCompositeKey)
+            {
+                for(var i = 0; i < PrimaryKey.Keys.Count; i++)
+                {
+                    var key = PrimaryKey.Keys[i];
+                    var keyVal = key.Property.GetValue(entity);
 
-            return val == null
-                ? PrimaryKeyDefaultValue == null
-                : val.Equals(PrimaryKeyDefaultValue);
+                    var isDefault = key.DefaultValue == null
+                        ? keyVal == null
+                        : key.DefaultValue.Equals(keyVal);
+
+                    if (isDefault)
+                    {
+                        return true;
+                    }
+                }
+
+                return false;
+            }
+            else
+            {
+                var val = GetPrimaryKey(entity);
+
+                return val == null
+                    ? PrimaryKey.Primary.DefaultValue == null
+                    : val.Equals(PrimaryKey.Primary.DefaultValue);
+            }           
         }
     }
 }

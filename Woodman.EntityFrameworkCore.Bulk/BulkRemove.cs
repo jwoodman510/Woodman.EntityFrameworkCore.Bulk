@@ -30,10 +30,18 @@ namespace Microsoft.EntityFrameworkCore
             return await queryable.BulkRemoveAsync(keys, true);
         }
 
+        public static async Task<int> BulkRemoveAsync<TEntity>(this IQueryable<TEntity> queryable, IEnumerable<object[]> keys)
+            where TEntity : class
+        {
+            return await queryable.BulkRemoveAsync(keys, true);
+        }
+
         private static async Task<int> BulkRemoveAsync<TKey, TEntity>(this IQueryable<TEntity> queryable, IEnumerable<TKey> keys, bool filterKeys)
             where TEntity : class
         {
-            var toRemove = keys?.ToList() ?? new List<TKey>();
+            var toRemove = typeof(TKey) == typeof(object[])
+                ? keys?.Select(k => k as object[])?.ToList() ?? new List<object[]>()
+                : keys?.Select(k => new object[] { k })?.ToList() ?? new List<object[]>();
 
             if (toRemove == null || toRemove.Count == 0 && filterKeys)
             {

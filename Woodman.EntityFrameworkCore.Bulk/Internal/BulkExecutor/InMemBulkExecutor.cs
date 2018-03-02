@@ -9,34 +9,47 @@ namespace Microsoft.EntityFrameworkCore
     {
         public InMemBulkExecutor(DbContext dbContext) : base(dbContext){ }
 
-        public IQueryable<TEntity> Join(IQueryable<TEntity> queryable, IEnumerable<string> keys, char delimiter)
+        public IQueryable<TEntity> Join(IQueryable<TEntity> queryable, IEnumerable<object[]> keys, char delimiter)
         {
-            var primKeys = new HashSet<string>(keys);
+            if (PrimaryKey.IsCompositeKey)
+            {
+                var primKeys = keys.ToList();
 
-            return queryable.Where(entity => primKeys.Contains(GetPrimaryKey(entity).ToString()));
+                return queryable.Where(entity => primKeys.Any(k => Enumerable.SequenceEqual(k, GetCompositeKey(entity))));
+            }
+            else
+            {
+                var primKeys = new HashSet<string>(keys.Select(k => k[0].ToString()));
+
+                return queryable.Where(entity => primKeys.Contains(GetPrimaryKey(entity).ToString()));
+            }
         }
 
-        public async Task<int> BulkRemoveAsync<TKey>(IQueryable<TEntity> queryable, bool filterKeys, List<TKey> keys)
+        public async Task<int> BulkRemoveAsync(IQueryable<TEntity> queryable, bool filterKeys, List<object[]> keys)
         {
-            var primKeys = new HashSet<string>(keys.Select(k => k.ToString()));
-
-            var entities = filterKeys
-                ? queryable
-                    .Where(entity => primKeys.Contains(GetPrimaryKey(entity).ToString()))
-                    .ToList()
-                : queryable.ToList();
-
-            foreach (var entity in entities)
+            if (filterKeys)
             {
-                DbContext.Remove(entity);
+                if (PrimaryKey.IsCompositeKey)
+                {
+                    var primKeys = keys.ToList();
+
+                    DbContext.RemoveRange(queryable.Where(entity => primKeys.Any(k => Enumerable.SequenceEqual(k, GetCompositeKey(entity)))));
+                }
+                else
+                {
+                    var primKeys = new HashSet<string>(keys.Select(k => k[0].ToString()));
+
+                    DbContext.RemoveRange(queryable.Where(entity => primKeys.Contains(GetPrimaryKey(entity).ToString())));
+                }
+            }
+            else
+            {
+                DbContext.RemoveRange(queryable);
             }
 
-            if (entities.Count > 0)
-            {
-                DbContext.SaveChanges();
-            }
+            var numDeleted = DbContext.SaveChanges();
 
-            return await Task.FromResult(entities.Count);
+            return await Task.FromResult(numDeleted);
         }
 
         public async Task BulkAddAsync(List<TEntity> entities)
@@ -69,18 +82,29 @@ namespace Microsoft.EntityFrameworkCore
             return await Task.FromResult(entities.Count);
         }
 
-        public async Task<int> BulkUpdateAsync<TKey>(IQueryable<TEntity> queryable, List<TKey> keys, List<string> updateProperties, Func<TKey, TEntity> updateFunc)
+        public async Task<int> BulkUpdateAsync(IQueryable<TEntity> queryable, List<object[]> keys, List<string> updateProperties, Func<object[], TEntity> updateFunc)
         {
-            var primKeys = keys.ToDictionary(k => k.ToString());
+            List<TEntity> entities;
 
-            var entities = queryable.Where(entity => primKeys.ContainsKey(GetPrimaryKey(entity).ToString()))
-                .ToList();
+            if (PrimaryKey.IsCompositeKey)
+            {
+                entities = queryable.Where(entity => keys.Any(k => Enumerable.SequenceEqual(GetCompositeKey(entity), k))).ToList();
+            }
+            else
+            {
+                var primKeys = new HashSet<string>(keys.Select(k => k[0].ToString()));
+
+                entities = queryable.Where(entity => primKeys.Contains(GetPrimaryKey(entity).ToString())).ToList();
+            }
 
             var updatePropDict = updateProperties.ToDictionary(key => key, value => typeof(TEntity).GetProperty(value));
 
             foreach (var entity in entities)
             {
-                var key = primKeys[GetPrimaryKey(entity).ToString()];
+                var key = PrimaryKey.IsCompositeKey
+                    ? GetCompositeKey(entity)
+                    : new object[] { GetPrimaryKey(entity) };
+
                 var updatedEntity = updateFunc(key);
 
                 foreach (var updateProp in updatePropDict)

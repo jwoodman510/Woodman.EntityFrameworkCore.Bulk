@@ -12,23 +12,12 @@ namespace Microsoft.EntityFrameworkCore
     {
         protected string TableName { get; }
 
-        protected string PrimaryKeyColumnName { get; }
-
-        protected string PrimaryKeyColumnType { get; }
-
         protected List<RelationalPropertyMapping> PropertyMappings { get; }
 
         protected RelationalBulkExecutor(DbContext dbContext)
             : base(dbContext)
         {
             TableName = EntityType.Relational()?.TableName;
-
-            var primaryKeyProperty = EntityType.FindPrimaryKey()?.Properties?.FirstOrDefault();
-            var primaryKeyPropertyAnnotations = primaryKeyProperty?.Relational();
-
-            PrimaryKeyColumnName = primaryKeyPropertyAnnotations?.ColumnName;
-            PrimaryKeyColumnType = primaryKeyPropertyAnnotations?.ColumnType;
-
             PropertyMappings = EntityType.GetProperties()?.ToList()?.Select(p => new RelationalPropertyMapping(p))?.ToList();
         }
 
@@ -67,15 +56,37 @@ namespace Microsoft.EntityFrameworkCore
 
                         if (hasActionColumn == false || reader["action"].ToString() == MergeActions.Insert)
                         {
-                            var id = reader[0];
-
-                            for(var i = entityIdIndex; i < entities.Count; i++)
+                            if (PrimaryKey.IsCompositeKey)
                             {
-                                if (IsPrimaryKeyUnset(entities[i]))
+                                for (var i = entityIdIndex; i < entities.Count; i++)
                                 {
-                                    SetPrimaryKey(entities[i], id);
-                                    entityIdIndex = i + 1;
-                                    break;
+                                    if (IsPrimaryKeyUnset(entities[i]))
+                                    {
+                                        var key = new object[PrimaryKey.Keys.Count];
+
+                                        for(var keyIndex = 0; keyIndex < key.Length; keyIndex++)
+                                        {
+                                            key[keyIndex] = hasActionColumn.Value ? reader[keyIndex + 1] : reader[keyIndex];
+                                        }
+
+                                        SetPrimaryKey(entities[i], key);
+                                        entityIdIndex = i + 1;
+                                        break;
+                                    }
+                                }
+                            }
+                            else
+                            {
+                                var id = hasActionColumn.Value ? reader[1] : reader[0];
+
+                                for (var i = entityIdIndex; i < entities.Count; i++)
+                                {
+                                    if (IsPrimaryKeyUnset(entities[i]))
+                                    {
+                                        SetPrimaryKey(entities[i], id);
+                                        entityIdIndex = i + 1;
+                                        break;
+                                    }
                                 }
                             }
                         }
@@ -86,6 +97,16 @@ namespace Microsoft.EntityFrameworkCore
             }
 
             return numRecordsAffected;
+        }
+
+        protected static string StringifyKeyVal(object value)
+        {
+            if (value == null)
+            {
+                return "NULL";
+            }
+
+            return value.ToString().Replace("'", "''");
         }
 
         private static bool GetHasActionColumn(DbDataReader reader)
@@ -123,11 +144,14 @@ namespace Microsoft.EntityFrameworkCore
 
         public bool IsPrimaryKey { get; }
 
+        public bool IsGenerated { get; }
+
         public RelationalPropertyMapping(IProperty property)
         {
             _property = property;
             IsNullable = _property?.IsNullable ?? false;
             IsPrimaryKey = _property.IsPrimaryKey();
+            IsGenerated = property.ValueGenerated == ValueGenerated.OnAdd;
 
             var propertyAnnotations = _property.Relational();
 

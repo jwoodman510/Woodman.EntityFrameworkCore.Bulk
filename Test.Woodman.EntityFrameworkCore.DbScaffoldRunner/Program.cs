@@ -2,7 +2,6 @@
 using System;
 using System.Diagnostics;
 using System.IO;
-using System.Reflection;
 
 namespace Test.Woodman.EntityFrameworkCore.DbScaffoldRunner
 {
@@ -11,6 +10,7 @@ namespace Test.Woodman.EntityFrameworkCore.DbScaffoldRunner
         public static void Main(string[] args)
         {
             IConfiguration config = null;
+            var rebuildSchema = false;
 
             Try(() =>
             {
@@ -18,17 +18,26 @@ namespace Test.Woodman.EntityFrameworkCore.DbScaffoldRunner
                     .SetBasePath(Directory.GetCurrentDirectory())
                     .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
                     .Build();
+
+                rebuildSchema = bool.Parse(config["rebuildSchema"]);
             }, "Load Config");
 
-            Try(() =>
+            if (rebuildSchema)
             {
-                new SchemaBuilder().BuildSql(config);
-            }, "Build SQL Schema");
+                Try(() =>
+                {
+                    new SchemaBuilder().BuildSql(config);
+                }, "Build SQL Schema");
 
-            Try(() =>
+                Try(() =>
+                {
+                    new SchemaBuilder().BuildNpgSql(config);
+                }, "Build NpgSql Schema");
+            }
+            else
             {
-                new SchemaBuilder().BuildNpgSql(config);
-            }, "Build NpgSql Schema");
+                Console.WriteLine("AppSettings.RebuildSchema set to false.");
+            }
 
             Try(() =>
             {

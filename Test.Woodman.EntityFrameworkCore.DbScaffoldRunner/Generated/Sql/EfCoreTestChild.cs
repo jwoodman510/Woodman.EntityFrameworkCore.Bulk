@@ -3,18 +3,14 @@ using System.Collections.Generic;
 
 namespace Test.Woodman.EntityFrameworkCore.DbScaffoldRunner.Generated.Sql
 {
-    public partial class EfCoreTest
+    public partial class EfCoreTestChild
     {
-        public EfCoreTest()
-        {
-            EfCoreTestChild = new HashSet<EfCoreTestChild>();
-        }
-
         public int Id { get; set; }
+        public int EfCoreTestId { get; set; }
         public string Name { get; set; }
         public DateTime CreatedDate { get; set; }
         public DateTime ModifiedDate { get; set; }
 
-        public ICollection<EfCoreTestChild> EfCoreTestChild { get; set; }
+        public EfCoreTest EfCoreTest { get; set; }
     }
 }

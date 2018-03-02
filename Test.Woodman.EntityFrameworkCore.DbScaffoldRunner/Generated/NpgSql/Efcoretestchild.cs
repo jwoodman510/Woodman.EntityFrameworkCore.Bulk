@@ -3,18 +3,14 @@ using System.Collections.Generic;
 
 namespace Test.Woodman.EntityFrameworkCore.DbScaffoldRunner.Generated.NpgSql
 {
-    public partial class Efcoretest
+    public partial class Efcoretestchild
     {
-        public Efcoretest()
-        {
-            Efcoretestchild = new HashSet<Efcoretestchild>();
-        }
-
         public int Id { get; set; }
+        public int Efcoretestid { get; set; }
         public string Name { get; set; }
         public DateTime Createddate { get; set; }
         public DateTime Modifieddate { get; set; }
 
-        public ICollection<Efcoretestchild> Efcoretestchild { get; set; }
+        public Efcoretest Efcoretest { get; set; }
     }
 }
