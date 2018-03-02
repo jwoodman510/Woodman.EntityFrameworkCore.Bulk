@@ -9,7 +9,7 @@ against an EntityFramwork DbContext. Currently, it supports SqlServer, NgpSql, a
    Install-Package Woodman.EntityFrameworkCore.Bulk
 ````
 
-NOTE: Version 1 Requires a Primary Key. Support for Composite Primary Keys may come later.
+NOTE: Support for Composite Keys are now implemented in version 2.1.0!
 
 
 #### Bulk Join ####
