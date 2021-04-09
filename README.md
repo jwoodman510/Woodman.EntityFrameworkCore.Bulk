@@ -1,6 +1,6 @@
 # Woodman.EntityFrameworkCore.Bulk #
 
-Entity Framework bulk transactions written for .NET Standard 2.0
+Entity Framework bulk transactions written for .NET Core 3.1
 
 Woodman.EntityFrameworkCore.Bulk provides a free set of extensions that provide a quick, simple way to perform bulk transactions
 against an EntityFramwork DbContext. Currently, it supports SqlServer, NgpSql, and InMemory Providers.
