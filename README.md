@@ -24,12 +24,12 @@ await db.Human
   });
 ````
 
-Produces the following SQL statement
+Produces the following SQL statement:
 ````
 UPDATE [h]
 SET
   [h].[FirstName] = @firstName
-FROM [dbo].[Human]
+FROM [dbo].[Human] AS [h]
 WHERE [h].[FirstName] IS NULL
 ````
 
