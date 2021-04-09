@@ -9,7 +9,29 @@ against an EntityFramwork DbContext. Currently, it supports SqlServer, NgpSql, a
    Install-Package Woodman.EntityFrameworkCore.Bulk
 ````
 
-NOTE: Support for Composite Keys are now implemented in version 2.1.0!
+#### SQL Translation Example ####
+Avoid multiple DB round trips while still using Entity Framework patterns.
+
+For a given bulk update:
+````
+using var db = new DbContext("connectionstring");
+
+await db.Human
+  .Where(e => e.FirstName == null)
+  .BulkUpdateAsync(() => new Human
+  {
+    FirstName = "Joe"
+  });
+````
+
+Produces the following SQL statement
+````
+UPDATE [h]
+SET
+  [h].[FirstName] = @firstName
+FROM [dbo].[Human]
+WHERE [h].[FirstName] IS NULL
+````
 
 
 #### Bulk Join ####
