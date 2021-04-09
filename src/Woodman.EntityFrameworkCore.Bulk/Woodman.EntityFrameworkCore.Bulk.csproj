@@ -1,0 +1,32 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <Authors>Jordan Woodman</Authors>
+    <PackageId>Woodman.EntityFrameworkCore.Bulk</PackageId>
+    <Description>Woodman.EntityFrameworkCore.Bulk provides bulk operations for SQLServer, Npgsql, and In Memory Entity Framework providers.</Description>
+    <PackageProjectUrl>https://github.com/jwoodman510/Woodman.EntityFrameworkCore.Bulk</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/jwoodman510/Woodman.EntityFrameworkCore.Bulk</RepositoryUrl>
+    <PackageLicenseUrl>https://github.com/jwoodman510/Woodman.EntityFrameworkCore.Bulk/blob/master/LICENSE</PackageLicenseUrl>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    <Version>3.0.0</Version>
+    <RepositoryType>git</RepositoryType>
+    <Company></Company>
+    <PackageIcon></PackageIcon>
+    <PackageIconUrl />
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <NoWarn>1701;1702;EF1000</NoWarn>
+    <PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CSharp" Version="4.7.0" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="3.1.1" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="3.1.1" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="3.1.1" />
+    <PackageReference Include="Microsoft.Extensions.Configuration" Version="3.1.1" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="3.1.1.1" />
+  </ItemGroup>
+</Project>
